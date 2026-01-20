@@ -5,8 +5,6 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Import animations */
-@import "tw-animate-css";
 
 /* Dialog overlay - white background */
 [data-state="open"] {

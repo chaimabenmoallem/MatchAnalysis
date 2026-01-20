@@ -79,6 +79,8 @@ function App() {
             
             <Route path="/analystdashboard" element={<AnalystDashboard />} />
             <Route path="/pages/AnalystDashboard" element={<AnalystDashboard />} />
+            
+            <Route path="/" element={<Home />} />
           </Routes>
         </Layout>
       
