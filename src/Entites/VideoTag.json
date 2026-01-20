@@ -1,0 +1,50 @@
+{
+  "name": "VideoTag",
+  "type": "object",
+  "properties": {
+    "task_id": {
+      "type": "string",
+      "description": "Reference to VideoTask"
+    },
+    "video_id": {
+      "type": "string",
+      "description": "Reference to Video"
+    },
+    "timestamp": {
+      "type": "number",
+      "description": "Tag timestamp (relative to match start)"
+    },
+    "tag_type": {
+      "type": "string",
+      "enum": [
+        "involved_start",
+        "involved_end",
+        "player_visible",
+        "player_out_of_frame",
+        "group_play",
+        "isolated_action",
+        "zone_change",
+        "note"
+      ],
+      "description": "Type of tag"
+    },
+    "zone": {
+      "type": "string",
+      "enum": [
+        "defending",
+        "midfield",
+        "attacking",
+        "transition"
+      ]
+    },
+    "note": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "task_id",
+    "video_id",
+    "timestamp",
+    "tag_type"
+  ]
+}

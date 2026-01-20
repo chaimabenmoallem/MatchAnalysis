@@ -1,0 +1,15 @@
+/* src/index.css */
+
+/* Tailwind directives */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Import animations */
+@import "tw-animate-css";
+
+/* Dialog overlay - white background */
+[data-state="open"] {
+  background-color: rgba(255, 255, 255, 0.95) !important;
+}
+

@@ -1,0 +1,126 @@
+{
+  "name": "Video",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Video title"
+    },
+    "file_url": {
+      "type": "string",
+      "description": "URL to the uploaded video file"
+    },
+    "duration": {
+      "type": "number",
+      "description": "Video duration in seconds"
+    },
+    "resolution": {
+      "type": "string",
+      "description": "Video resolution (e.g., 1920x1080)"
+    },
+    "frame_rate": {
+      "type": "number",
+      "description": "Frames per second"
+    },
+    "file_size": {
+      "type": "number",
+      "description": "File size in bytes"
+    },
+    "format": {
+      "type": "string",
+      "enum": [
+        "mp4",
+        "mov",
+        "avi",
+        "mkv"
+      ],
+      "description": "Video format"
+    },
+    "home_team": {
+      "type": "string"
+    },
+    "away_team": {
+      "type": "string"
+    },
+    "competition": {
+      "type": "string"
+    },
+    "match_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "venue": {
+      "type": "string"
+    },
+    "player_name": {
+      "type": "string"
+    },
+    "jersey_number": {
+      "type": "number"
+    },
+    "player_team": {
+      "type": "string"
+    },
+    "player_position": {
+      "type": "string",
+      "enum": [
+        "goalkeeper",
+        "defender",
+        "midfielder",
+        "forward"
+      ]
+    },
+    "played_full_match": {
+      "type": "boolean",
+      "default": true
+    },
+    "minutes_played": {
+      "type": "number"
+    },
+    "sample_frames": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "timestamp": {
+            "type": "number"
+          },
+          "frame_url": {
+            "type": "string"
+          },
+          "annotation": {
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "number"
+              },
+              "y": {
+                "type": "number"
+              },
+              "width": {
+                "type": "number"
+              },
+              "height": {
+                "type": "number"
+              }
+            }
+          }
+        }
+      }
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "uploaded",
+        "metadata_extracted",
+        "annotated",
+        "ready"
+      ],
+      "default": "uploaded"
+    }
+  },
+  "required": [
+    "title",
+    "file_url"
+  ]
+}

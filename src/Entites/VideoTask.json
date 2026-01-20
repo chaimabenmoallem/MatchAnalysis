@@ -1,0 +1,78 @@
+{
+  "name": "VideoTask",
+  "type": "object",
+  "properties": {
+    "video_id": {
+      "type": "string",
+      "description": "Reference to Video entity"
+    },
+    "task_type": {
+      "type": "string",
+      "enum": [
+        "video_processing",
+        "analyst_annotation"
+      ],
+      "description": "Type of task"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending_processing",
+        "pending_assignment",
+        "assigned",
+        "in_progress",
+        "completed",
+        "rejected"
+      ],
+      "default": "pending_processing"
+    },
+    "assigned_to": {
+      "type": "string",
+      "description": "Email of assigned user"
+    },
+    "assigned_by": {
+      "type": "string",
+      "description": "Email of admin who assigned"
+    },
+    "assigned_date": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "started_date": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "completed_date": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "match_start_time": {
+      "type": "number",
+      "description": "Video timestamp where match starts (in seconds)"
+    },
+    "player_video_url": {
+      "type": "string",
+      "description": "URL to generated player video"
+    },
+    "player_video_confirmed": {
+      "type": "boolean",
+      "default": false
+    },
+    "notes": {
+      "type": "string"
+    },
+    "priority": {
+      "type": "string",
+      "enum": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "default": "medium"
+    }
+  },
+  "required": [
+    "video_id",
+    "task_type"
+  ]
+}
