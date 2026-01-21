@@ -1,5 +1,5 @@
 // src/api/supabaseClient.js
-const API_BASE_URL = window.location.origin.replace('5000', '8080') + '/api';
+const API_BASE_URL = '/api';
 
 // ============= Video Management =============
 export const videoService = {
