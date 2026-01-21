@@ -4,7 +4,7 @@ expertMode = true
 
 [nix]
 channel = "stable-25_05"
-packages = ["xorg.libxcb", "xorg.libX11", "libGL", "libglvnd"]
+packages = ["libGL", "libglvnd", "xorg.libX11", "xorg.libxcb"]
 
 [workflows]
 runButton = "Project"

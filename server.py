@@ -1,6 +1,8 @@
 import os
 import cv2
 import base64
+import requests
+import tempfile
 from flask import Flask, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
@@ -81,15 +83,41 @@ def extract_frames():
     if not video_url:
         return jsonify({'error': 'Video URL required'}), 400
 
-    cap = cv2.VideoCapture(video_url)
+    local_path = None
+    if not video_url.startswith('http'):
+        if os.path.exists(video_url):
+            local_path = video_url
+        else:
+            potential_path = os.path.join(os.getcwd(), video_url)
+            if os.path.exists(potential_path):
+                local_path = potential_path
+
+    if local_path:
+        cap = cv2.VideoCapture(local_path)
+    else:
+        try:
+            response = requests.get(video_url, stream=True, timeout=30)
+            if response.ok:
+                fd, temp_path = tempfile.mkstemp(suffix='.mp4')
+                with os.fdopen(fd, 'wb') as tmp:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        tmp.write(chunk)
+                local_path = temp_path
+                cap = cv2.VideoCapture(local_path)
+            else:
+                return jsonify({'error': f'Failed to download video from {video_url}'}), 400
+        except Exception as e:
+            return jsonify({'error': f'Download error: {str(e)}'}), 500
+
     if not cap.isOpened():
-        return jsonify({'error': 'Could not open video URL'}), 400
+        if local_path and not video_url.startswith('http'):
+             if local_path.startswith(tempfile.gettempdir()):
+                 os.remove(local_path)
+        return jsonify({'error': f'Could not open video: {video_url}'}), 400
 
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     frames = []
     
-    # Extract 10 evenly spaced frames
-    # Skip first and last 5% to avoid black frames
     start_frame = int(total_frames * 0.05)
     end_frame = int(total_frames * 0.95)
     usable_range = end_frame - start_frame
@@ -99,14 +127,19 @@ def extract_frames():
         cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
         ret, frame = cap.read()
         if ret:
-            # Resize for performance and aspect ratio
-            # Standard 16:9 thumbnail
             frame = cv2.resize(frame, (480, 270))
             _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
             frame_base64 = base64.b64encode(buffer).decode('utf-8')
             frames.append(f"data:image/jpeg;base64,{frame_base64}")
 
     cap.release()
+    
+    if local_path and local_path.startswith(tempfile.gettempdir()):
+        try:
+            os.remove(local_path)
+        except:
+            pass
+            
     return jsonify({'frames': frames})
 
 if __name__ == '__main__':

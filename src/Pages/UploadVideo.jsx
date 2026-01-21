@@ -166,191 +166,23 @@ class UploadVideo extends Component {
       const fileUrl = videoData.file_url;
       console.log('Starting frame extraction from:', fileUrl);
       
-      const videoResponse = await fetch(fileUrl);
-      if (!videoResponse.ok) throw new Error('Failed to download video');
-      const videoBlob = await videoResponse.blob();
-      const blobUrl = URL.createObjectURL(videoBlob);
-      console.log('Video downloaded successfully, size:', videoBlob.size, 'bytes');
-      
-      const video = document.createElement('video');
-      video.src = blobUrl;
-      video.crossOrigin = 'anonymous';
-      video.preload = 'metadata';
-      
-      // Wait for metadata and ensure video can be decoded
-      await new Promise((resolve, reject) => {
-        const timeout = setTimeout(() => {
-          reject(new Error('Video metadata load timeout'));
-        }, 30000);
-        
-        video.onloadedmetadata = async () => {
-          clearTimeout(timeout);
-          console.log('Video metadata loaded:', video.duration, 'seconds');
-          
-          // Try to load first frame to ensure video is decodable
-          try {
-            video.currentTime = 0.5;
-            await new Promise(res => {
-              const checkReady = () => {
-                if (video.readyState >= 2) {
-                  video.removeEventListener('canplay', checkReady);
-                  res();
-                }
-              };
-              video.addEventListener('canplay', checkReady);
-              setTimeout(() => {
-                video.removeEventListener('canplay', checkReady);
-                res();
-              }, 3000);
-            });
-          } catch (e) {
-            console.warn('Could not preload first frame:', e);
-          }
-          resolve();
-        };
-        
-        video.onerror = (e) => {
-          clearTimeout(timeout);
-          const errorMsg = video.error?.message || 'Unknown error';
-          reject(new Error(`Failed to load video: ${errorMsg}`));
-        };
-      });
-      
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d', { willReadFrequently: true });
-      canvas.width = 1280;
-      canvas.height = 720;
-      
-      const frames = [];
-      const frameCount = 10;
-      const interval = Math.max(1, video.duration / (frameCount + 1));
-      
-      // Use more spacing to avoid duplicate keyframes
-      const extractedTimestamps = [];
-      
-      console.log(`Video duration: ${video.duration}s, extracting ${frameCount} frames at ~${interval}s intervals`);
-      
-      for (let i = 1; i <= frameCount; i++) {
-        const targetTimestamp = interval * i;
-        
-        await new Promise((resolve) => {
-          console.log(`[Frame ${i}] Seeking to ${targetTimestamp.toFixed(2)}s`);
-          video.currentTime = targetTimestamp;
-          
-          let seeked = false;
-          let seekTimeout;
-          let checkInterval;
-          let framesDrawn = 0;
-          
-          const extractFrame = () => {
-            if (framesDrawn > 0) return; // Only draw once
-            framesDrawn++;
-            
-            try {
-              // Ensure video has data before drawing
-              if (video.readyState >= 2) {
-                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                
-                // Check if frame is actually black (potential error indicator)
-                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                const data = imageData.data;
-                let blackPixels = 0;
-                for (let j = 0; j < data.length; j += 4) {
-                  if (data[j] === 0 && data[j + 1] === 0 && data[j + 2] === 0) {
-                    blackPixels++;
-                  }
-                }
-                const blackPercentage = (blackPixels / (canvas.width * canvas.height)) * 100;
-                
-                if (blackPercentage > 95) {
-                  console.warn(`[Frame ${i}] Mostly black (${blackPercentage.toFixed(1)}%), retrying...`);
-                  framesDrawn--;
-                  return;
-                }
-                
-                const frameUrl = canvas.toDataURL('image/jpeg', 0.85);
-                const actualTimestamp = Math.round(video.currentTime * 100) / 100;
-                
-                frames[i - 1] = {
-                  timestamp: Math.round(video.currentTime),
-                  frame_url: frameUrl,
-                  annotation: null
-                };
-                
-                extractedTimestamps.push(actualTimestamp);
-                console.log(`[Frame ${i}] ✓ Extracted at ${actualTimestamp.toFixed(2)}s (target: ${targetTimestamp.toFixed(2)}s)`);
-              } else {
-                console.warn(`[Frame ${i}] Video not ready (readyState: ${video.readyState}), retrying...`);
-                framesDrawn--;
-              }
-            } catch (err) {
-              console.error(`[Frame ${i}] Error drawing:`, err);
-            }
-          };
-          
-          const onSeeked = () => {
-            if (seeked) return;
-            seeked = true;
-            
-            if (seekTimeout) clearTimeout(seekTimeout);
-            if (checkInterval) clearInterval(checkInterval);
-            
-            // Small delay to ensure frame is decoded
-            setTimeout(() => {
-              extractFrame();
-              video.removeEventListener('seeked', onSeeked);
-              resolve();
-            }, 100);
-          };
-          
-          // Monitor currentTime to detect seek completion
-          checkInterval = setInterval(() => {
-            if (!seeked && Math.abs(video.currentTime - targetTimestamp) < 0.2) {
-              console.log(`[Frame ${i}] Seek confirmed at ${video.currentTime.toFixed(2)}s`);
-              seeked = true;
-              clearInterval(checkInterval);
-              if (seekTimeout) clearTimeout(seekTimeout);
-              
-              setTimeout(() => {
-                extractFrame();
-                video.removeEventListener('seeked', onSeeked);
-                resolve();
-              }, 150);
-            }
-          }, 50);
-          
-          // Longer timeout for seek
-          seekTimeout = setTimeout(() => {
-            if (!seeked) {
-              console.warn(`[Frame ${i}] Seek timeout after 8s, extracting current frame`);
-              seeked = true;
-              clearInterval(checkInterval);
-              extractFrame();
-              video.removeEventListener('seeked', onSeeked);
-              resolve();
-            }
-          }, 8000);
-          
-          video.addEventListener('seeked', onSeeked);
-        });
-        
-        // Longer delay between seeks
-        await new Promise(resolve => setTimeout(resolve, 300));
+      const result = await actionAnnotationService.extractFrames(fileUrl);
+      if (result && result.frames) {
+        console.log(`Successfully extracted ${result.frames.length} frames from backend`);
+        this.setState(prev => ({
+          videoData: {
+            ...prev.videoData,
+            sample_frames: result.frames.map((frame_url, index) => ({
+              timestamp: 0, // Backend doesn't return timestamps yet, could be improved
+              frame_url: frame_url,
+              annotation: null
+            }))
+          },
+          extractingFrames: false
+        }));
+      } else {
+        throw new Error('No frames returned from backend');
       }
-      
-      const validFrames = frames.filter(Boolean);
-      console.log(`Successfully extracted ${validFrames.length} frames`);
-      console.log('Extracted timestamps:', extractedTimestamps.map(t => t.toFixed(2)).join(', '));
-      
-      URL.revokeObjectURL(blobUrl);
-      
-      this.setState(prev => ({
-        videoData: {
-          ...prev.videoData,
-          sample_frames: validFrames
-        },
-        extractingFrames: false
-      }));
     } catch (err) {
       console.error('Frame extraction error:', err);
       this.setState({ error: `Failed to extract frames: ${err.message}`, extractingFrames: false });
