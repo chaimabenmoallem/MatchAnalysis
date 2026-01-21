@@ -89,14 +89,20 @@ def extract_frames():
     frames = []
     
     # Extract 10 evenly spaced frames
+    # Skip first and last 5% to avoid black frames
+    start_frame = int(total_frames * 0.05)
+    end_frame = int(total_frames * 0.95)
+    usable_range = end_frame - start_frame
+    
     for i in range(10):
-        frame_idx = int((i * total_frames) / 10)
+        frame_idx = start_frame + int((i * usable_range) / 9)
         cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
         ret, frame = cap.read()
         if ret:
-            # Resize for performance
-            frame = cv2.resize(frame, (320, 180))
-            _, buffer = cv2.imencode('.jpg', frame)
+            # Resize for performance and aspect ratio
+            # Standard 16:9 thumbnail
+            frame = cv2.resize(frame, (480, 270))
+            _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
             frame_base64 = base64.b64encode(buffer).decode('utf-8')
             frames.append(f"data:image/jpeg;base64,{frame_base64}")
 

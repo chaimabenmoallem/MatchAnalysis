@@ -234,11 +234,26 @@ class VideoEditor extends Component {
       const video = await videoService.get(videoId);
       if (video) {
         this.setState({ video, videoLoading: false });
+        // Extract frames automatically when video is loaded
+        if (video.url) {
+          this.handleExtractFrames(video.url);
+        }
       } else {
         this.setState({ videoLoading: false });
       }
     } catch (error) {
       this.setState({ videoLoading: false });
+    }
+  };
+
+  handleExtractFrames = async (videoUrl) => {
+    try {
+      const result = await actionAnnotationService.extractFrames(videoUrl);
+      if (result && result.frames) {
+        this.setState({ timelineFrames: result.frames });
+      }
+    } catch (error) {
+      console.error('Error extracting frames:', error);
     }
   };
 
