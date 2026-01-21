@@ -1,0 +1,63 @@
+cc24152dff285584.js:2 WebSocket is already in CLOSING or CLOSED state.
+value @ cc24152dff285584.js:2
+tH @ cc24152dff285584.js:2
+value @ cc24152dff285584.js:2
+(anonymous) @ cc24152dff285584.js:2
+(anonymous) @ cc24152dff285584.js:2
+(anonymous) @ cc24152dff285584.js:2
+apply @ cc24152dff285584.js:2
+(anonymous) @ 3aac005dab5c1b13.js:2
+(anonymous) @ e3c8814c599ded25.js:2
+t @ e3c8814c599ded25.js:2
+s @ e3c8814c599ded25.js:2
+(anonymous) @ e3c8814c599ded25.js:2
+(anonymous) @ e3c8814c599ded25.js:2
+(anonymous) @ 3aac005dab5c1b13.js:2
+(anonymous) @ 3aac005dab5c1b13.js:2
+(anonymous) @ e3c8814c599ded25.js:2
+t @ e3c8814c599ded25.js:2
+s @ e3c8814c599ded25.js:2
+(anonymous) @ e3c8814c599ded25.js:2
+(anonymous) @ e3c8814c599ded25.js:2
+wait @ 3aac005dab5c1b13.js:2
+u @ e7f250450dd90ed3.js:2
+(anonymous) @ e7f250450dd90ed3.js:2
+a @ a9543f8c6084ee89.js:2
+setTimeout
+(anonymous) @ a9543f8c6084ee89.js:2
+Object.assign.isScheduled @ e7f250450dd90ed3.js:2
+(anonymous) @ 3aac005dab5c1b13.js:2
+(anonymous) @ 3aac005dab5c1b13.js:2
+r @ 3aac005dab5c1b13.js:2
+a @ a9543f8c6084ee89.js:2Understand this error
+injected.js:37 Starting frame extraction from: videos/1768995836505-4gyhnx514.mp4
+injected.js:37 Frame extraction error: ReferenceError: actionAnnotationService is not defined
+    at UploadVideo.extractFrames (UploadVideo.jsx:169:22)
+    at handlePlayerInfoSubmit (UploadVideo.jsx:158:10)
+    at HTMLUnknownElement.callCallback2 (chunk-276SZO74.js?v=6153a2c4:3674:22)
+    at Object.invokeGuardedCallbackDev (chunk-276SZO74.js?v=6153a2c4:3699:24)
+    at invokeGuardedCallback (chunk-276SZO74.js?v=6153a2c4:3733:39)
+    at invokeGuardedCallbackAndCatchFirstError (chunk-276SZO74.js?v=6153a2c4:3736:33)
+    at executeDispatch (chunk-276SZO74.js?v=6153a2c4:7014:11)
+    at processDispatchQueueItemsInOrder (chunk-276SZO74.js?v=6153a2c4:7034:15)
+    at processDispatchQueue (chunk-276SZO74.js?v=6153a2c4:7043:13)
+    at dispatchEventsForPlugins (chunk-276SZO74.js?v=6153a2c4:7051:11)
+(anonymous) @ injected.js:37
+extractFrames @ UploadVideo.jsx:187
+handlePlayerInfoSubmit @ UploadVideo.jsx:158
+callCallback2 @ chunk-276SZO74.js?v=6153a2c4:3674
+invokeGuardedCallbackDev @ chunk-276SZO74.js?v=6153a2c4:3699
+invokeGuardedCallback @ chunk-276SZO74.js?v=6153a2c4:3733
+invokeGuardedCallbackAndCatchFirstError @ chunk-276SZO74.js?v=6153a2c4:3736
+executeDispatch @ chunk-276SZO74.js?v=6153a2c4:7014
+processDispatchQueueItemsInOrder @ chunk-276SZO74.js?v=6153a2c4:7034
+processDispatchQueue @ chunk-276SZO74.js?v=6153a2c4:7043
+dispatchEventsForPlugins @ chunk-276SZO74.js?v=6153a2c4:7051
+(anonymous) @ chunk-276SZO74.js?v=6153a2c4:7174
+batchedUpdates$1 @ chunk-276SZO74.js?v=6153a2c4:18913
+batchedUpdates @ chunk-276SZO74.js?v=6153a2c4:3579
+dispatchEventForPluginEventSystem @ chunk-276SZO74.js?v=6153a2c4:7173
+dispatchEventWithEnableCapturePhaseSelectiveHydrationWithoutDiscreteEventReplay @ chunk-276SZO74.js?v=6153a2c4:5478
+dispatchEvent @ chunk-276SZO74.js?v=6153a2c4:5472
+dispatchDiscreteEvent @ chunk-276SZO74.js?v=6153a2c4:5449Understand this error
+cc24152dff285584.js:2 WebSocket is already in CLOSING or CLOSED state.
