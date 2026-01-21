@@ -32,7 +32,15 @@ export const videoTaskService = {
   list: async () => [],
   filter: async () => [],
   get: async () => null,
-  create: async (data) => data,
+  create: async (data) => {
+    const response = await fetch(`${API_BASE_URL}/tasks`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    if (!response.ok) throw new Error('Failed to create task');
+    return await response.json();
+  },
   update: async (id, data) => data,
   delete: async () => {}
 };

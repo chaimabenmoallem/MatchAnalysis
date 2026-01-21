@@ -69,16 +69,47 @@ def get_videos():
 
 @app.route('/api/videos', methods=['POST'])
 def create_video():
-    data = request.json
-    video = Video(
-        id=data.get('id'),
-        title=data.get('title'),
-        url=data.get('url'),
-        status=data.get('status', 'pending')
-    )
-    db.session.add(video)
-    db.session.commit()
-    return jsonify({'message': 'Video created'}), 201
+    try:
+        data = request.json
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+            
+        # The frontend might send 'file_url' or 'url'
+        url = data.get('url') or data.get('file_url')
+        
+        # If no ID is provided, generate one
+        video_id = data.get('id') or str(int(datetime.utcnow().timestamp() * 1000))
+        
+        video = Video(
+            id=video_id,
+            title=data.get('title', 'Untitled Video'),
+            url=url,
+            status=data.get('status', 'uploaded')
+        )
+        db.session.add(video)
+        db.session.commit()
+        
+        return jsonify({
+            'id': video.id,
+            'title': video.title,
+            'url': video.url,
+            'status': video.status
+        }), 201
+    except Exception as e:
+        db.session.rollback()
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/tasks', methods=['POST'])
+def create_task():
+    try:
+        # Mock task creation for now since we don't have a Task model yet
+        # But the frontend expects this endpoint to exist
+        data = request.json
+        return jsonify({'message': 'Task created', 'id': 'task_' + str(int(datetime.utcnow().timestamp()))}), 201
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/annotations/<video_id>', methods=['GET'])
 def get_annotations(video_id):
