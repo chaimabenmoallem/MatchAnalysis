@@ -29,9 +29,25 @@ export const videoService = {
 };
 
 export const videoTaskService = {
-  list: async () => [],
-  filter: async () => [],
-  get: async () => null,
+  async list() {
+    const response = await fetch(`${API_BASE_URL}/tasks`);
+    if (!response.ok) throw new Error('Failed to fetch tasks');
+    return await response.json();
+  },
+  async filter(filterData, sortBy = null) {
+    const params = new URLSearchParams();
+    if (filterData?.task_type) params.append('task_type', filterData.task_type);
+    if (sortBy) params.append('sort_by', sortBy);
+    
+    const response = await fetch(`${API_BASE_URL}/tasks?${params.toString()}`);
+    if (!response.ok) throw new Error('Failed to filter tasks');
+    return await response.json();
+  },
+  async get(id) {
+    const response = await fetch(`${API_BASE_URL}/tasks/${id}`);
+    if (!response.ok) throw new Error('Failed to get task');
+    return await response.json();
+  },
   create: async (data) => {
     const response = await fetch(`${API_BASE_URL}/tasks`, {
       method: 'POST',

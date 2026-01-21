@@ -101,15 +101,97 @@ def create_video():
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
+class VideoTask(db.Model):
+    id = db.Column(db.String(255), primary_key=True)
+    video_id = db.Column(db.String(255), db.ForeignKey('video.id'))
+    task_type = db.Column(db.String(100))
+    status = db.Column(db.String(50))
+    priority = db.Column(db.String(50))
+    notes = db.Column(db.Text)
+    match_start_time = db.Column(db.Integer)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def __init__(self, id, video_id, task_type, status='pending', priority='medium', notes=None, match_start_time=None):
+        self.id = id
+        self.video_id = video_id
+        self.task_type = task_type
+        self.status = status
+        self.priority = priority
+        self.notes = notes
+        self.match_start_time = match_start_time
+
+# Routes
+@app.route('/api/tasks', methods=['GET'])
+def get_tasks():
+    # Basic filtering support for task_type
+    task_type = request.args.get('task_type')
+    query = VideoTask.query
+    if task_type:
+        query = query.filter_by(task_type=task_type)
+    
+    # Simple sort by created_at desc if requested
+    sort = request.args.get('sort_by')
+    if sort == '-created_at':
+        query = query.order_by(VideoTask.created_at.desc())
+    
+    tasks = query.all()
+    return jsonify([{
+        'id': t.id,
+        'video_id': t.video_id,
+        'task_type': t.task_type,
+        'status': t.status,
+        'priority': t.priority,
+        'notes': t.notes,
+        'match_start_time': t.match_start_time,
+        'created_at': t.created_at.isoformat()
+    } for t in tasks])
+
 @app.route('/api/tasks', methods=['POST'])
 def create_task():
     try:
-        # Mock task creation for now since we don't have a Task model yet
-        # But the frontend expects this endpoint to exist
         data = request.json
-        return jsonify({'message': 'Task created', 'id': 'task_' + str(int(datetime.utcnow().timestamp()))}), 201
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+            
+        task_id = str(int(datetime.utcnow().timestamp() * 1000))
+        task = VideoTask(
+            id=task_id,
+            video_id=data.get('video_id'),
+            task_type=data.get('task_type'),
+            status=data.get('status', 'pending'),
+            priority=data.get('priority', 'medium'),
+            notes=data.get('notes'),
+            match_start_time=data.get('match_start_time')
+        )
+        db.session.add(task)
+        db.session.commit()
+        
+        return jsonify({
+            'id': task.id,
+            'video_id': task.video_id,
+            'status': task.status
+        }), 201
     except Exception as e:
+        db.session.rollback()
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
+
+@app.route('/api/tasks/<task_id>', methods=['GET'])
+def get_task(task_id):
+    task = VideoTask.query.get(task_id)
+    if not task:
+        return jsonify({'error': 'Task not found'}), 404
+    return jsonify({
+        'id': task.id,
+        'video_id': task.video_id,
+        'task_type': task.task_type,
+        'status': task.status,
+        'priority': task.priority,
+        'notes': task.notes,
+        'match_start_time': task.match_start_time,
+        'created_at': task.created_at.isoformat()
+    })
 
 @app.route('/api/annotations/<video_id>', methods=['GET'])
 def get_annotations(video_id):
