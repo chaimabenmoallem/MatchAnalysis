@@ -40,6 +40,22 @@ class ActionAnnotation(db.Model):
     note = db.Column(db.Text)
 
 # Routes
+@app.route('/api/upload', methods=['POST'])
+def upload_file():
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file part'}), 400
+    file = request.files['file']
+    # Use the path provided or the filename
+    path = request.form.get('path', file.filename)
+    
+    # Ensure directory exists relative to current working directory
+    full_path = os.path.abspath(os.path.join(os.getcwd(), path))
+    os.makedirs(os.path.dirname(full_path), exist_ok=True)
+    
+    file.save(full_path)
+    # Return the path that can be used locally
+    return jsonify({'path': path, 'url': path})
+
 @app.route('/api/videos', methods=['GET'])
 def get_videos():
     videos = Video.query.all()
@@ -80,21 +96,24 @@ def get_annotations(video_id):
 def extract_frames():
     try:
         data = request.json
+        if not data:
+            return jsonify({'error': 'No JSON data provided'}), 400
+            
         video_url = data.get('url')
         if not video_url:
             return jsonify({'error': 'Video URL required'}), 400
 
+        print(f"Extracting frames for: {video_url}")
+
         local_path = None
         if not video_url.startswith('http'):
-            if os.path.exists(video_url):
-                local_path = video_url
-            else:
-                potential_path = os.path.join(os.getcwd(), video_url)
-                if os.path.exists(potential_path):
-                    local_path = potential_path
-
-        if local_path:
-            cap = cv2.VideoCapture(local_path)
+            # Convert relative path to absolute path
+            local_path = os.path.abspath(os.path.join(os.getcwd(), video_url))
+            if not os.path.exists(local_path):
+                # Try finding it in workspace root
+                local_path = os.path.abspath(video_url)
+                if not os.path.exists(local_path):
+                    return jsonify({'error': f'Local file not found: {video_url} (checked {local_path})'}), 404
         else:
             try:
                 response = requests.get(video_url, stream=True, timeout=30)
@@ -104,25 +123,34 @@ def extract_frames():
                         for chunk in response.iter_content(chunk_size=8192):
                             tmp.write(chunk)
                     local_path = temp_path
-                    cap = cv2.VideoCapture(local_path)
                 else:
                     return jsonify({'error': f'Failed to download video from {video_url}'}), 400
             except Exception as e:
                 return jsonify({'error': f'Download error: {str(e)}'}), 500
 
+        print(f"Opening video at: {local_path}")
+        cap = cv2.VideoCapture(local_path)
         if not cap.isOpened():
-            if local_path and local_path.startswith(tempfile.gettempdir()):
-                 os.remove(local_path)
-            return jsonify({'error': f'Could not open video: {video_url}'}), 400
+            error_msg = f'OpenCV could not open video: {video_url}'
+            print(error_msg)
+            return jsonify({'error': error_msg}), 400
 
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        print(f"Total frames: {total_frames}")
+        
         if total_frames <= 0:
-            return jsonify({'error': 'Invalid video file (no frames found)'}), 400
+            # Fallback for videos where frame count is not reported
+            # Try to read first frame to see if it works
+            ret, _ = cap.read()
+            if not ret:
+                return jsonify({'error': 'Invalid video file (no frames readable)'}), 400
+            # If we can read frames but don't know total, just take 10 from the start or approximate
+            total_frames = 1000 # Dummy value
 
         frames = []
         start_frame = int(total_frames * 0.05)
         end_frame = int(total_frames * 0.95)
-        usable_range = end_frame - start_frame
+        usable_range = max(1, end_frame - start_frame)
         
         for i in range(10):
             frame_idx = start_frame + int((i * usable_range) / 9)
@@ -133,6 +161,8 @@ def extract_frames():
                 _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
                 frame_base64 = base64.b64encode(buffer).decode('utf-8')
                 frames.append(f"data:image/jpeg;base64,{frame_base64}")
+            else:
+                print(f"Failed to read frame at index {frame_idx}")
 
         cap.release()
         
@@ -142,6 +172,9 @@ def extract_frames():
             except:
                 pass
                 
+        if not frames:
+            return jsonify({'error': 'No frames could be extracted from the video'}), 500
+            
         return jsonify({'frames': frames})
     except Exception as e:
         import traceback

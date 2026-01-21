@@ -78,7 +78,20 @@ export const actionAnnotationService = {
 };
 
 export const storageService = {
-  uploadFile: async (file, path) => ({ path }),
+  uploadFile: async (file, path, onProgress) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('path', path);
+    
+    const response = await fetch(`${API_BASE_URL}/upload`, {
+      method: 'POST',
+      body: formData
+    });
+    
+    if (!response.ok) throw new Error('Upload failed');
+    if (onProgress) onProgress(100);
+    return await response.json();
+  },
   getPublicUrl: (path) => path,
   deleteFile: async () => {},
   downloadFile: async () => new Blob()
