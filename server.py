@@ -1,4 +1,6 @@
 import os
+import cv2
+import base64
 from flask import Flask, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
@@ -71,6 +73,35 @@ def get_annotations(video_id):
         'action_category': a.action_category,
         'note': a.note
     } for a in annotations])
+
+@app.route('/api/extract-frames', methods=['POST'])
+def extract_frames():
+    data = request.json
+    video_url = data.get('url')
+    if not video_url:
+        return jsonify({'error': 'Video URL required'}), 400
+
+    cap = cv2.VideoCapture(video_url)
+    if not cap.isOpened():
+        return jsonify({'error': 'Could not open video URL'}), 400
+
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    frames = []
+    
+    # Extract 10 evenly spaced frames
+    for i in range(10):
+        frame_idx = int((i * total_frames) / 10)
+        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+        ret, frame = cap.read()
+        if ret:
+            # Resize for performance
+            frame = cv2.resize(frame, (320, 180))
+            _, buffer = cv2.imencode('.jpg', frame)
+            frame_base64 = base64.b64encode(buffer).decode('utf-8')
+            frames.append(f"data:image/jpeg;base64,{frame_base64}")
+
+    cap.release()
+    return jsonify({'frames': frames})
 
 if __name__ == '__main__':
     with app.app_context():

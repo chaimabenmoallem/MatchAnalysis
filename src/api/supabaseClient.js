@@ -61,6 +61,15 @@ export const actionAnnotationService = {
     if (!response.ok) throw new Error('Failed to fetch annotations');
     return await response.json();
   },
+  async extractFrames(videoUrl) {
+    const response = await fetch(`${API_BASE_URL}/extract-frames`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: videoUrl })
+    });
+    if (!response.ok) throw new Error('Failed to extract frames');
+    return await response.json();
+  },
   filter: async () => [],
   get: async () => null,
   create: async (data) => data,
