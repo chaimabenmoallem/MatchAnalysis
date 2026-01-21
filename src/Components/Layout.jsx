@@ -1,7 +1,7 @@
 import React, { Component } from 'react';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '../utils';
-import { authService } from '../api/supabaseClient';
+import { authService } from '../api/apiClient';
 import { 
   Upload, 
   ClipboardList, 

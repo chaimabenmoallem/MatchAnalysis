@@ -1,5 +1,5 @@
 import React, { Component } from 'react';
-import { videoTagService, videoSegmentService, videoTaskService, videoService, storageService } from '../api/supabaseClient';
+import { videoTagService, videoSegmentService, videoTaskService, videoService, storageService } from '../api/apiClient';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createPageUrl } from '../utils';
 import { Card, CardContent, CardHeader, CardTitle } from "../Components/ui/card";

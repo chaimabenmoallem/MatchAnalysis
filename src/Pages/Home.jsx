@@ -1,5 +1,5 @@
 import React, { Component } from 'react';
-import { videoTaskService, videoService, actionAnnotationService } from '../api/supabaseClient';
+import { videoTaskService, videoService, actionAnnotationService } from '../api/apiClient';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '../utils';
 import { Card, CardContent, CardHeader, CardTitle } from "../Components/ui/card";

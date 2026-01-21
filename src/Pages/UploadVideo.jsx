@@ -1,5 +1,5 @@
 import React, { Component } from 'react';
-import { videoService, videoTaskService, storageService, actionAnnotationService } from '../api/supabaseClient';
+import { videoService, videoTaskService, storageService, actionAnnotationService } from '../api/apiClient';
 import { Button } from "../Components/ui/button";
 import { Input } from "../Components/ui/input";
 import { Label } from "../Components/ui/label";

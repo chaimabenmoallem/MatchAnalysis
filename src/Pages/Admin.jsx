@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { userService, videoTaskService, videoService } from '../api/supabaseClient';
+import { userService, videoTaskService, videoService } from '../api/apiClient';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from "../Components/ui/card";
 import { Button } from "../Components/ui/button";

@@ -78,69 +78,75 @@ def get_annotations(video_id):
 
 @app.route('/api/extract-frames', methods=['POST'])
 def extract_frames():
-    data = request.json
-    video_url = data.get('url')
-    if not video_url:
-        return jsonify({'error': 'Video URL required'}), 400
+    try:
+        data = request.json
+        video_url = data.get('url')
+        if not video_url:
+            return jsonify({'error': 'Video URL required'}), 400
 
-    local_path = None
-    if not video_url.startswith('http'):
-        if os.path.exists(video_url):
-            local_path = video_url
-        else:
-            potential_path = os.path.join(os.getcwd(), video_url)
-            if os.path.exists(potential_path):
-                local_path = potential_path
-
-    if local_path:
-        cap = cv2.VideoCapture(local_path)
-    else:
-        try:
-            response = requests.get(video_url, stream=True, timeout=30)
-            if response.ok:
-                fd, temp_path = tempfile.mkstemp(suffix='.mp4')
-                with os.fdopen(fd, 'wb') as tmp:
-                    for chunk in response.iter_content(chunk_size=8192):
-                        tmp.write(chunk)
-                local_path = temp_path
-                cap = cv2.VideoCapture(local_path)
+        local_path = None
+        if not video_url.startswith('http'):
+            if os.path.exists(video_url):
+                local_path = video_url
             else:
-                return jsonify({'error': f'Failed to download video from {video_url}'}), 400
-        except Exception as e:
-            return jsonify({'error': f'Download error: {str(e)}'}), 500
+                potential_path = os.path.join(os.getcwd(), video_url)
+                if os.path.exists(potential_path):
+                    local_path = potential_path
 
-    if not cap.isOpened():
-        if local_path and not video_url.startswith('http'):
-             if local_path.startswith(tempfile.gettempdir()):
+        if local_path:
+            cap = cv2.VideoCapture(local_path)
+        else:
+            try:
+                response = requests.get(video_url, stream=True, timeout=30)
+                if response.ok:
+                    fd, temp_path = tempfile.mkstemp(suffix='.mp4')
+                    with os.fdopen(fd, 'wb') as tmp:
+                        for chunk in response.iter_content(chunk_size=8192):
+                            tmp.write(chunk)
+                    local_path = temp_path
+                    cap = cv2.VideoCapture(local_path)
+                else:
+                    return jsonify({'error': f'Failed to download video from {video_url}'}), 400
+            except Exception as e:
+                return jsonify({'error': f'Download error: {str(e)}'}), 500
+
+        if not cap.isOpened():
+            if local_path and local_path.startswith(tempfile.gettempdir()):
                  os.remove(local_path)
-        return jsonify({'error': f'Could not open video: {video_url}'}), 400
+            return jsonify({'error': f'Could not open video: {video_url}'}), 400
 
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    frames = []
-    
-    start_frame = int(total_frames * 0.05)
-    end_frame = int(total_frames * 0.95)
-    usable_range = end_frame - start_frame
-    
-    for i in range(10):
-        frame_idx = start_frame + int((i * usable_range) / 9)
-        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
-        ret, frame = cap.read()
-        if ret:
-            frame = cv2.resize(frame, (480, 270))
-            _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
-            frame_base64 = base64.b64encode(buffer).decode('utf-8')
-            frames.append(f"data:image/jpeg;base64,{frame_base64}")
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        if total_frames <= 0:
+            return jsonify({'error': 'Invalid video file (no frames found)'}), 400
 
-    cap.release()
-    
-    if local_path and local_path.startswith(tempfile.gettempdir()):
-        try:
-            os.remove(local_path)
-        except:
-            pass
-            
-    return jsonify({'frames': frames})
+        frames = []
+        start_frame = int(total_frames * 0.05)
+        end_frame = int(total_frames * 0.95)
+        usable_range = end_frame - start_frame
+        
+        for i in range(10):
+            frame_idx = start_frame + int((i * usable_range) / 9)
+            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+            ret, frame = cap.read()
+            if ret:
+                frame = cv2.resize(frame, (480, 270))
+                _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+                frame_base64 = base64.b64encode(buffer).decode('utf-8')
+                frames.append(f"data:image/jpeg;base64,{frame_base64}")
+
+        cap.release()
+        
+        if local_path and local_path.startswith(tempfile.gettempdir()):
+            try:
+                os.remove(local_path)
+            except:
+                pass
+                
+        return jsonify({'frames': frames})
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     with app.app_context():
