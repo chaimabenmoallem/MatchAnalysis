@@ -21,6 +21,12 @@ class Video(db.Model):
     status = db.Column(db.String(50), default='pending')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+    def __init__(self, id, title, url=None, status='pending'):
+        self.id = id
+        self.title = title
+        self.url = url
+        self.status = status
+
 class ActionAnnotation(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     video_id = db.Column(db.String(255), db.ForeignKey('video.id'))
