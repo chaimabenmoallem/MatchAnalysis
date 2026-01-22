@@ -1360,28 +1360,22 @@ class VideoEditor extends Component {
                                 try {
                                   console.log('Deleting tags:', { startTagId: startTag.id, endTagId: endTag.id });
                                   
-                                  // Remove from pending segments
-                                  const pendingItem = pendingSegments.find(seg => 
-                                    seg.startTagId === startTag.id && seg.endTagId === endTag.id
-                                  );
-                                  if (pendingItem) {
-                                    console.log('Removing from pending segments');
-                                    this.handleRemovePendingSegment(startTag.id, endTag.id);
-                                  }
-
-                                  // Find matching segment - convert milliseconds to seconds for comparison
+                                  // Find and remove matching segment first
                                   const startTimeSeconds = startTag.timestamp / 1000;
                                   const endTimeSeconds = endTag.timestamp / 1000;
                                   
                                   const matchingSegment = segments.find(seg => 
-                                    Math.abs(seg.start_time / 1000 - startTimeSeconds) < 0.5 && 
-                                    Math.abs(seg.end_time / 1000 - endTimeSeconds) < 0.5
+                                    Math.abs(seg.start_time - startTimeSeconds) < 0.5 && 
+                                    Math.abs(seg.end_time - endTimeSeconds) < 0.5
                                   );
                                   
                                   if (matchingSegment) {
                                     console.log('Deleting matching segment:', matchingSegment.id);
                                     await videoSegmentService.delete(matchingSegment.id);
                                   }
+
+                                  // Remove from pending segments
+                                  this.handleRemovePendingSegment(startTag.id, endTag.id);
 
                                   console.log('Deleting tags:', startTag.id, endTag.id);
                                   await videoTagService.delete(startTag.id);
@@ -1393,7 +1387,6 @@ class VideoEditor extends Component {
                                   console.log('Delete complete');
                                 } catch (error) {
                                   console.error('Error deleting tags:', error);
-                                  alert('Failed to delete: ' + error.message);
                                 }
                               }}
                             >
