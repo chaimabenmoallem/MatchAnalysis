@@ -1,12 +1,15 @@
 import React, { Component } from 'react';
-import { videoTagService, videoSegmentService, videoTaskService, videoService, actionAnnotationService } from '../api/apiClient';
+import { videoTagService, videoSegmentService, videoTaskService, videoService, storageService } from '../api/apiClient';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createPageUrl } from '../utils';
 import { Card, CardContent, CardHeader, CardTitle } from "../Components/ui/card";
 import { Button } from "../Components/ui/button";
 import { Badge } from "../Components/ui/badge";
 import { Input } from "../Components/ui/input";
+import { Textarea } from "../Components/ui/textarea";
 import { Slider } from "../Components/ui/slider";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "../Components/ui/dialog";
+import { Maximize2, ExternalLink } from 'lucide-react';
 import { 
   Play, 
   Pause, 
@@ -14,27 +17,34 @@ import {
   SkipForward, 
   Flag,
   MapPin,
+  Eye,
+  EyeOff,
+  Users,
+  UserCircle,
   Plus,
+  Trash2,
+  CheckCircle2,
+  Clock,
+  Scissors,
   Video,
   ChevronLeft,
   ChevronRight,
-  User,
-  CheckCircle2,
-  ExternalLink,
-  Scissors,
-  Trash2,
-  Clock
+  User
 } from 'lucide-react';
 import { Skeleton } from "../Components/ui/skeleton";
+import { motion, AnimatePresence } from 'framer-motion';
+import TimelineThumbnail from '../Components/video/TimelineThumbnail';
 import EnhancedTimeline from '../Components/video/EnhancedTimeline';
 import PlayerIdentificationGallery from '../Components/video/PlayerIdentificationGallery';
 
+// Wrapper component to handle navigation and query client
 class VideoEditorWithRouter extends Component {
   render() {
     const urlParams = new URLSearchParams(window.location.search);
     const taskId = urlParams.get('taskId');
     const videoId = urlParams.get('videoId');
     const navigate = (url) => window.location.href = url;
+    
     return <VideoEditor taskId={taskId} videoId={videoId} navigate={navigate} />;
   }
 }
@@ -42,31 +52,147 @@ class VideoEditorWithRouter extends Component {
 class VideoEditor extends Component {
   constructor(props) {
     super(props);
+    
     this.videoRef = React.createRef();
     this.popupWindowRef = React.createRef();
+    
     this.state = {
-      allTasks: [], allVideos: [], task: null, video: null, tags: [], segments: [],
-      allTasksLoading: true, taskLoading: true, videoLoading: true,
-      isPlaying: false, currentTime: 0, duration: 0, matchStartSet: false, matchStartTime: 0,
-      selectedZone: null, showTaggingDialog: false, pendingSegments: [],
-      searchTerm: '', statusFilter: 'all', playUntilTime: null, showGallery: false,
-      showCreateTaskDialog: false, taskPriority: 'medium'
+      // Data
+      allTasks: [],
+      allVideos: [],
+      task: null,
+      video: null,
+      tags: [],
+      segments: [],
+      isNewVideo: false,
+      showCreateTaskDialog: false,
+      taskPriority: 'medium',
+      
+      // Loading states
+      allTasksLoading: true,
+      taskLoading: true,
+      videoLoading: true,
+      
+      // Video player state
+      isPlaying: false,
+      currentTime: 0,
+      duration: 0,
+      matchStartSet: false,
+      matchStartTime: 0,
+      playUntilTime: null,
+      
+      // UI state
+      selectedZone: null,
+      noteText: '',
+      showTaggingDialog: false,
+      selectedTag: null,
+      selectedFrame: null,
+      isDragging: false,
+      dialogPosition: { x: 0, y: 0 },
+      showGallery: false,
+      isPopupOpen: false,
+      pendingSegments: [],
+      
+      // Filters
+      searchTerm: '',
+      statusFilter: 'all'
     };
   }
 
-  componentDidMount() { this.loadData(); this.setupPopupHandlers(); }
+  componentDidMount() {
+    this.loadData();
+    this.setupPopupHandlers();
+  }
+
   componentDidUpdate(prevProps, prevState) {
-    if (prevProps.taskId !== this.props.taskId || prevProps.videoId !== this.props.videoId) this.loadData();
-    if (prevState.task !== this.state.task && this.state.task?.match_start_time) {
-      this.setState({ matchStartTime: this.state.task.match_start_time, matchStartSet: true });
+    if (prevProps.taskId !== this.props.taskId || prevProps.videoId !== this.props.videoId) {
+      this.loadData();
+    }
+
+    if (prevState.task !== this.state.task && this.state.task) {
+      if (this.state.task.match_start_time !== undefined && this.state.task.match_start_time !== null) {
+        this.setState({
+          matchStartTime: this.state.task.match_start_time,
+          matchStartSet: true
+        });
+      }
+    }
+
+    if (prevState.tags !== this.state.tags) {
+      this.updatePopupSegments();
     }
   }
-  componentWillUnmount() { this.cleanupPopupHandlers(); }
+
+  componentWillUnmount() {
+    this.cleanupPopupHandlers();
+  }
+
+  setupPopupHandlers = () => {
+    window.handleTagFromPopup = (tagType) => {
+      this.handleAddTag(tagType);
+    };
+
+    window.setSelectedZoneFromPopup = (zone) => {
+      this.setState({ selectedZone: zone });
+    };
+
+    window.deleteTagPairFromPopup = async (startId, endId) => {
+      try {
+        const allTags = await videoTagService.filter({ video_id: this.state.video?.id });
+        const allSegments = await videoSegmentService.filter({ video_id: this.state.video?.id });
+        
+        const startTag = allTags.find(t => t.id === startId);
+        const endTag = allTags.find(t => t.id === endId);
+        
+        if (startTag && endTag) {
+          // Convert timestamps from milliseconds to seconds for comparison
+          const startTimeSeconds = startTag.timestamp / 1000;
+          const endTimeSeconds = endTag.timestamp / 1000;
+          
+          const matchingSegment = allSegments.find(seg => 
+            Math.abs(seg.start_time - startTimeSeconds) < 0.5 && 
+            Math.abs(seg.end_time - endTimeSeconds) < 0.5
+          );
+          if (matchingSegment) {
+            await videoSegmentService.delete(matchingSegment.id).catch(() => {});
+          }
+        }
+
+        await videoTagService.delete(startId).catch(() => {});
+        await videoTagService.delete(endId).catch(() => {});
+
+        this.loadTags();
+        this.loadSegments();
+      } catch (error) {
+        console.error('Delete error:', error);
+      }
+    };
+
+    window.handleConfirmFromPopup = () => {
+      this.handleConfirmPlayerVideo();
+    };
+  };
+
+  cleanupPopupHandlers = () => {
+    delete window.handleTagFromPopup;
+    delete window.setSelectedZoneFromPopup;
+    delete window.deleteTagPairFromPopup;
+    delete window.handleConfirmFromPopup;
+  };
 
   loadData = async () => {
-    if (!this.props.taskId && !this.props.videoId) { await this.loadAllTasks(); await this.loadAllVideos(); }
-    else if (this.props.videoId) { await this.loadVideo(this.props.videoId); this.setState({ showCreateTaskDialog: true }); }
-    else { await this.loadTask(); await this.loadTags(); await this.loadSegments(); }
+    if (!this.props.taskId && !this.props.videoId) {
+      await this.loadAllTasks();
+      await this.loadAllVideos();
+    } else if (this.props.videoId) {
+      // Loading a new video that was just uploaded
+      await this.loadVideoById(this.props.videoId);
+      this.setState({ isNewVideo: true, showCreateTaskDialog: true });
+    } else {
+      await this.loadTask();
+      await this.loadTags();
+      await this.loadSegments();
+    }
   };
 
   loadAllTasks = async () => {
@@ -74,41 +200,127 @@ class VideoEditor extends Component {
     try {
       const tasks = await videoTaskService.filter({ task_type: 'video_processing' }, '-created_at');
       this.setState({ allTasks: tasks, allTasksLoading: false });
-    } catch (e) { this.setState({ allTasksLoading: false }); }
+    } catch (error) {
+      this.setState({ allTasksLoading: false });
+    }
   };
 
-  loadAllVideos = async () => { try { const videos = await videoService.list(); this.setState({ allVideos: videos }); } catch (e) {} };
+  loadAllVideos = async () => {
+    try {
+      const videos = await videoService.list();
+      this.setState({ allVideos: videos });
+    } catch (error) {}
+  };
 
   loadTask = async () => {
     if (!this.props.taskId) return;
+    
     this.setState({ taskLoading: true });
     try {
       const task = await videoTaskService.get(this.props.taskId);
       this.setState({ task, taskLoading: false });
-      if (task?.video_id) await this.loadVideo(task.video_id);
-    } catch (e) { this.setState({ taskLoading: false }); }
+      
+      if (task?.video_id) {
+        await this.loadVideo(task.video_id);
+      }
+    } catch (error) {
+      this.setState({ taskLoading: false });
+    }
   };
 
   loadVideo = async (videoId) => {
     this.setState({ videoLoading: true });
     try {
       const video = await videoService.get(videoId);
-      this.setState({ video, videoLoading: false });
-    } catch (e) { this.setState({ videoLoading: false }); }
+      if (video) {
+        this.setState({ video, videoLoading: false });
+        // Extract frames automatically when video is loaded
+        if (video.url) {
+          this.handleExtractFrames(video.url);
+        }
+      } else {
+        this.setState({ videoLoading: false });
+      }
+    } catch (error) {
+      this.setState({ videoLoading: false });
+    }
+  };
+
+  handleExtractFrames = async (videoUrl) => {
+    try {
+      const result = await actionAnnotationService.extractFrames(videoUrl);
+      if (result && result.frames) {
+        this.setState({ timelineFrames: result.frames });
+      }
+    } catch (error) {
+      console.error('Error extracting frames:', error);
+    }
+  };
+
+  loadVideoById = async (videoId) => {
+    this.setState({ videoLoading: true });
+    try {
+      const video = await videoService.get(videoId);
+      if (video) {
+        this.setState({ video, videoLoading: false });
+      } else {
+        this.setState({ videoLoading: false });
+      }
+    } catch (error) {
+      this.setState({ videoLoading: false });
+    }
+  };
+
+  createProcessingTask = async () => {
+    const { video, taskPriority } = this.state;
+    try {
+      this.setState({ taskLoading: true });
+      
+      // Create the processing task
+      const task = await videoTaskService.create({
+        video_id: video.id,
+        task_type: 'video_processing',
+        status: 'pending_processing',
+        priority: taskPriority
+      });
+
+      // Load the task to display it
+      this.setState({ 
+        task, 
+        isNewVideo: false, 
+        showCreateTaskDialog: false,
+        taskLoading: false 
+      });
+    } catch (error) {
+      console.error('Error creating task:', error);
+      this.setState({ taskLoading: false });
+    }
   };
 
   loadTags = async () => {
+    if (!this.props.taskId && !this.state.task) return;
+    const taskId = this.props.taskId || this.state.task?.id;
     try {
       const tags = await videoTagService.filter({ video_id: this.state.video?.id });
       this.setState({ tags });
-    } catch (e) {}
+    } catch (error) {}
   };
 
   loadSegments = async () => {
+    if (!this.props.taskId && !this.state.task) return;
+    const taskId = this.props.taskId || this.state.task?.id;
     try {
-      const raw = await videoSegmentService.filter({ video_id: this.state.video?.id });
-      this.setState({ segments: raw.map(s => ({ ...s, start_time: s.start_time/1000, end_time: s.end_time/1000, zone: s.segment_type })) });
-    } catch (e) {}
+      const rawSegments = await videoSegmentService.filter({ video_id: this.state.video?.id });
+      // Convert millisecond timestamps from database to seconds for display
+      // Also map segment_type to zone for color display
+      const segments = rawSegments.map(seg => ({
+        ...seg,
+        start_time: seg.start_time / 1000,
+        end_time: seg.end_time / 1000,
+        zone: seg.segment_type // Use segment_type as zone for color mapping
+      }));
+      this.setState({ segments });
+    } catch (error) {}
   };
 
   formatTime = (seconds) => {
@@ -118,382 +330,1239 @@ class VideoEditor extends Component {
     return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
-  getMatchTime = (videoTime) => this.state.matchStartSet ? Math.max(0, videoTime - this.state.matchStartTime) : videoTime;
+  getMatchTime = (videoTime) => {
+    if (!this.state.matchStartSet) return videoTime;
+    return Math.max(0, videoTime - this.state.matchStartTime);
+  };
 
   handlePlayPause = () => {
     if (this.videoRef.current) {
-      if (this.state.isPlaying) this.videoRef.current.pause(); else this.videoRef.current.play();
+      if (this.state.isPlaying) {
+        this.videoRef.current.pause();
+      } else {
+        this.videoRef.current.play();
+      }
       this.setState({ isPlaying: !this.state.isPlaying });
     }
   };
 
-  handleSeek = (value) => { if (this.videoRef.current) { this.videoRef.current.currentTime = value[0]; this.setState({ currentTime: value[0] }); } };
-  handleSkip = (seconds) => { if (this.videoRef.current) { const nt = Math.max(0, Math.min(this.state.duration, this.videoRef.current.currentTime + seconds)); this.videoRef.current.currentTime = nt; this.setState({ currentTime: nt }); } };
+  handleSeek = (value) => {
+    if (this.videoRef.current) {
+      this.videoRef.current.currentTime = value[0];
+      this.setState({ currentTime: value[0] });
+    }
+  };
+
+  handleSkip = (seconds) => {
+    if (this.videoRef.current) {
+      const newTime = Math.max(0, Math.min(this.state.duration, this.videoRef.current.currentTime + seconds));
+      this.videoRef.current.currentTime = newTime;
+      this.setState({ currentTime: newTime });
+    }
+  };
 
   handleSetMatchStart = async () => {
     const { currentTime } = this.state;
-    this.setState({ matchStartTime: currentTime, matchStartSet: true });
-    try { await videoTaskService.update(this.props.taskId, { match_start_time: Math.round(currentTime * 1000), status: 'in_progress' }); } catch (e) {}
+    this.setState({ 
+      matchStartTime: currentTime,
+      matchStartSet: true 
+    });
+    
+    try {
+      await videoTaskService.update(this.props.taskId, { 
+        match_start_time: Math.round(currentTime * 1000), 
+        status: 'in_progress' 
+      });
+      await this.loadTask();
+    } catch (error) {}
   };
 
   handleAddTag = async (tagType) => {
-    const { currentTime, selectedZone, video } = this.state;
-    if (!video?.id) return;
+    const { currentTime, selectedZone, task, matchStartTime } = this.state;
+    const taskId = this.props.taskId || task?.id;
+    if (!taskId || !this.state.video?.id) {
+      console.warn('Missing taskId or videoId:', { taskId, videoId: this.state.video?.id });
+      return;
+    }
+    
     try {
       const matchTime = this.getMatchTime(currentTime);
+      const timestampMs = Math.round(matchTime * 1000); // Convert to milliseconds as integer
+      
+      console.log('Creating tag:', { tagType, matchTime, timestampMs, selectedZone });
+      
       await videoTagService.create({
-        video_id: video.id, timestamp: Math.round(matchTime * 1000),
-        tag_type: tagType, tag_name: tagType, zone: selectedZone, description: `Tag at ${matchTime.toFixed(2)}s`
+        video_id: this.state.video.id,
+        timestamp: timestampMs,
+        tag_type: tagType,
+        tag_name: tagType,
+        zone: selectedZone,
+        description: `Tag at ${matchTime.toFixed(2)}s`
       });
       await this.loadTags();
-    } catch (e) { console.error(e); }
+    } catch (error) {
+      console.error('Error creating tag:', error);
+    }
   };
 
   handleCreatePendingSegment = (startTag, endTag) => {
-    const { pendingSegments } = this.state;
-    let st = startTag.timestamp / 1000, et = endTag.timestamp / 1000;
-    if (st > et) [st, et] = [et, st];
-    if (!pendingSegments.find(s => Math.abs(s.start_time - st) < 0.5 && Math.abs(s.end_time - et) < 0.5)) {
-      this.setState({ pendingSegments: [...pendingSegments, { start_time: st, end_time: et, zone: startTag.zone || this.state.selectedZone, startTagId: startTag.id, endTagId: endTag.id }] });
+    const { pendingSegments, segments } = this.state;
+    
+    // Convert timestamps from milliseconds to seconds for comparison
+    let startTimeSeconds = startTag.timestamp / 1000;
+    let endTimeSeconds = endTag.timestamp / 1000;
+    
+    // Ensure start time is always before end time
+    if (startTimeSeconds > endTimeSeconds) {
+      [startTimeSeconds, endTimeSeconds] = [endTimeSeconds, startTimeSeconds];
+    }
+    
+    const alreadyPending = pendingSegments.find(seg => 
+      Math.abs(seg.start_time - startTimeSeconds) < 0.5 && 
+      Math.abs(seg.end_time - endTimeSeconds) < 0.5
+    );
+
+    if (!alreadyPending) {
+      this.setState({
+        pendingSegments: [...pendingSegments, {
+          start_time: startTimeSeconds,
+          end_time: endTimeSeconds,
+          zone: startTag.zone || this.state.selectedZone,
+          startTagId: startTag.id,
+          endTagId: endTag.id
+        }]
+      });
     }
   };
 
-  handleRemovePendingSegment = (sid, eid) => this.setState({ pendingSegments: this.state.pendingSegments.filter(s => s.startTagId !== sid || s.endTagId !== eid) });
+  handleRemovePendingSegment = (startTagId, endTagId) => {
+    this.setState({
+      pendingSegments: this.state.pendingSegments.filter(seg => 
+        seg.startTagId !== startTagId || seg.endTagId !== endTagId
+      )
+    });
+  };
 
   handleConfirmPlayerVideo = async () => {
-    const { pendingSegments, video, task } = this.state;
+    const { pendingSegments, segments, video, task } = this.state;
+    
     for (const seg of pendingSegments) {
-      await videoSegmentService.create({ video_id: video.id, start_time: Math.round(seg.start_time*1000), end_time: Math.round(seg.end_time*1000), segment_type: seg.zone || 'player_involvement', description: `${seg.zone} segment` });
+      // Convert times from seconds to milliseconds (as integers)
+      const startTimeMs = Math.round(seg.start_time * 1000);
+      const endTimeMs = Math.round(seg.end_time * 1000);
+      
+      await videoSegmentService.create({
+        video_id: video.id,
+        start_time: startTimeMs,
+        end_time: endTimeMs,
+        segment_type: seg.zone || 'player_involvement',
+        description: `${seg.zone} - Player segment from ${seg.start_time.toFixed(2)}s to ${seg.end_time.toFixed(2)}s`
+      });
     }
-    await videoTaskService.update(this.props.taskId, { status: 'completed' });
-    await videoTaskService.create({ video_id: video.id, task_type: 'analyst_annotation', status: 'pending_assignment', priority: task?.priority || 'medium' });
+
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    await videoTaskService.update(this.props.taskId, { 
+      status: 'completed'
+    });
+
+    await videoTaskService.create({
+      video_id: video.id,
+      task_type: 'analyst_annotation',
+      status: 'pending_assignment',
+      priority: task?.priority || 'medium',
+      notes: task?.notes
+    });
+
     this.setState({ pendingSegments: [] });
     await this.loadSegments();
   };
 
   handlePopOutDashboard = () => {
-    const popupWindow = window.open('', 'TaggingDashboard', 'width=800,height=900');
+    this.setState({ isPopupOpen: true, showTaggingDialog: false });
+    
+    const popupWindow = window.open('', 'TaggingDashboard', 'width=800,height=900,left=100,top=100');
     this.popupWindowRef.current = popupWindow;
+    
     if (popupWindow) {
       popupWindow.document.write(`
-        <!DOCTYPE html><html><head><title>Quick Tagging Dashboard</title>
-        <style>
-          body { margin: 0; font-family: sans-serif; padding: 20px; color: #1e293b; background: white; }
-          .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-          .time-display { background: #f1f5f9; padding: 15px; border-radius: 12px; margin-bottom: 20px; text-align: center; }
-          .time-val { font-family: monospace; font-size: 24px; font-weight: bold; color: #0f172a; }
-          .zone-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 20px; }
-          .zone-btn { padding: 10px; border: 1px solid #e2e8f0; border-radius: 8px; cursor: pointer; background: white; font-size: 13px; font-weight: 500; transition: all 0.2s; }
-          .zone-btn.selected { background: #10b981; color: white; border-color: #10b981; }
-          .marker-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
-          .tag-btn { padding: 14px; border: 2px solid #e2e8f0; border-radius: 10px; cursor: pointer; background: white; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px; }
-          .tag-btn.success { border-color: #10b981; color: #10b981; }
-          .tag-btn.danger { border-color: #ef4444; color: #ef4444; }
-          .tag-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-          .banner { background: #ecfdf5; border: 1px solid #a7f3d0; padding: 12px; border-radius: 10px; margin-bottom: 15px; display: none; }
-          .list-container { border-top: 1px solid #e2e8f0; padding-top: 15px; }
-          .pair-card { padding: 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
-          .delete-btn { color: #ef4444; border: none; background: none; cursor: pointer; font-size: 18px; padding: 4px; }
-          .queue-btn { background: #2563eb; color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; }
-          .confirm-btn { background: #10b981; color: white; border: none; padding: 14px; border-radius: 10px; cursor: pointer; width: 100%; font-weight: 700; font-size: 16px; margin-top: 20px; }
-          .badge { font-size: 11px; padding: 2px 6px; border-radius: 4px; border: 1px solid #cbd5e1; background: white; color: #64748b; }
-        </style></head>
-        <body>
-          <div class="header"><h2>Tagging Dashboard</h2></div>
-          <div class="time-display">
-            <div style="font-size: 12px; color: #64748b; margin-bottom: 4px;">VIDEO TIME</div>
-            <div id="current-time" class="time-val">00:00:00</div>
-          </div>
-          <div id="pending-banner" class="banner">
-            <div style="font-weight: 600; color: #065f46;">▶ Start Marked at <span id="pending-time">00:00</span></div>
-            <div style="font-size: 12px; color: #059669;">Ready to mark end time</div>
-          </div>
-          <div style="margin-bottom: 10px; font-size: 13px; font-weight: 600; color: #475569;">FIELD ZONE</div>
-          <div class="zone-grid">
-            <button class="zone-btn" id="zone-defending" onclick="window.selectZone('defending')">Defending</button>
-            <button class="zone-btn" id="zone-midfield" onclick="window.selectZone('midfield')">Midfield</button>
-            <button class="zone-btn" id="zone-attacking" onclick="window.selectZone('attacking')">Attacking</button>
-            <button class="zone-btn" id="zone-transition" onclick="window.selectZone('transition')">Transition</button>
-          </div>
-          <div class="marker-grid">
-            <button class="tag-btn success" id="start-btn" onclick="window.opener.handleTagFromPopup('involved_start')">START</button>
-            <button class="tag-btn danger" id="end-btn" onclick="window.opener.handleTagFromPopup('involved_end')" disabled>END</button>
-          </div>
-          <div class="list-container">
-            <div style="font-size: 13px; font-weight: 600; color: #475569; margin-bottom: 10px;">TAGGED PAIRS (<span id="count">0</span>)</div>
-            <div id="list"></div>
-          </div>
-          <button id="confirm-btn" class="confirm-btn" style="display:none;" onclick="window.opener.handleConfirmFromPopup()">CONFIRM ALL (<span id="qcount">0</span>)</button>
-          <script>
-            let selZone = null;
-            const fmt = (s) => {
-              const h = Math.floor(s/3600), m = Math.floor((s%3600)/60), sec = Math.floor(s%60);
-              return h.toString().padStart(2,'0')+':'+m.toString().padStart(2,'0')+':'+sec.toString().padStart(2,'0');
-            };
-            window.selectZone = (z) => {
-              selZone=z; document.querySelectorAll('.zone-btn').forEach(b=>b.classList.remove('selected'));
-              const btn = document.getElementById('zone-'+z); if(btn) btn.classList.add('selected');
-              window.opener.setSelectedZoneFromPopup(z);
-            };
-            window.addEventListener('message', (e) => {
-              if(e.data.type==='UPDATE_TIME') document.getElementById('current-time').textContent = fmt(e.data.time);
-              if(e.data.type==='UPDATE_DATA') {
-                const { involvedStarts, involvedEnds, pendingSegments, hasPendingStart, lastStartTime, currentZone, segments } = e.data;
-                const banner = document.getElementById('pending-banner');
-                if(hasPendingStart) { banner.style.display='block'; document.getElementById('pending-time').textContent=fmt(lastStartTime/1000); document.getElementById('start-btn').disabled=true; document.getElementById('end-btn').disabled=false; }
-                else { banner.style.display='none'; document.getElementById('start-btn').disabled=false; document.getElementById('end-btn').disabled=true; }
-                const list = document.getElementById('list'); list.innerHTML = '';
-                const count = Math.min(involvedStarts.length, involvedEnds.length);
-                document.getElementById('count').textContent = count;
-                document.getElementById('qcount').textContent = pendingSegments.length;
-                for(let i=0; i<count; i++) {
-                  const s=involvedStarts[i], en=involvedEnds[i];
-                  const q = pendingSegments.some(ps=>ps.startTagId===s.id), sv = segments.some(seg=>Math.abs(seg.start_time-s.timestamp/1000)<0.5);
-                  const div = document.createElement('div'); div.className='pair-card';
-                  div.innerHTML = \`<div><div style="font-weight:600; font-size:14px;">\${fmt(s.timestamp/1000).substring(3)} - \${fmt(en.timestamp/1000).substring(3)}</div>
-                    <span class="badge">\${s.zone||'No Zone'}</span> \${q?'<span class="badge" style="background:#dbeafe; color:#1d4ed8; border-color:#bfdbfe;">Queued</span>':''} \${sv?'<span class="badge" style="background:#dcfce7; color:#166534; border-color:#bbf7d0;">Saved</span>':''}</div>
-                    <div style="display:flex; gap:8px; align-items:center;">
-                      \${(!q && !sv)?\`<button class="queue-btn" onclick="window.opener.handleCreatePendingSegmentFromPopup(\${i})">+ Queue</button>\`:''}
-                      <button class="delete-btn" onclick="window.opener.deleteTagPairFromPopup('\${s.id}','\${en.id}')">🗑</button>
-                    </div>\`;
-                  list.appendChild(div);
-                }
-                document.getElementById('confirm-btn').style.display = pendingSegments.length > 0 ? 'block' : 'none';
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Quick Tagging Dashboard</title>
+            <style>
+              body { 
+                margin: 0; 
+                font-family: system-ui, -apple-system, sans-serif; 
+                background: white;
+                padding: 20px;
               }
-            });
-          </script>
-        </body></html>
+              .zone-btn { 
+                padding: 8px 16px; 
+                border: 1px solid #e2e8f0; 
+                border-radius: 6px; 
+                cursor: pointer; 
+                background: white;
+                font-size: 14px;
+              }
+              .zone-btn.selected { background: #10b981; color: white; border-color: #10b981; }
+              .zone-defending { background: #ef4444; }
+              .zone-midfield { background: #f59e0b; }
+              .zone-attacking { background: #10b981; }
+              .zone-transition { background: #a855f7; }
+              .tag-btn { 
+                padding: 10px 16px; 
+                border: 2px solid #e2e8f0; 
+                border-radius: 8px; 
+                cursor: pointer; 
+                background: white;
+                font-size: 14px;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+              }
+              .tag-btn:hover { background: #f8fafc; }
+              .tag-btn.success { border-color: #10b981; color: #10b981; }
+              .tag-btn.danger { border-color: #ef4444; color: #ef4444; }
+              input, textarea { 
+                width: 100%; 
+                padding: 8px 12px; 
+                border: 1px solid #e2e8f0; 
+                border-radius: 6px; 
+                font-size: 14px;
+              }
+              button.primary { 
+                background: #10b981; 
+                color: white; 
+                padding: 8px 16px; 
+                border: none; 
+                border-radius: 6px; 
+                cursor: pointer; 
+              }
+              .segment-item {
+                padding: 12px;
+                background: #f8fafc;
+                border-radius: 8px;
+                margin-bottom: 8px;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+              }
+              .delete-btn {
+                background: transparent;
+                color: #ef4444;
+                border: none;
+                padding: 8px;
+                border-radius: 6px;
+                cursor: pointer;
+                min-width: 36px;
+                height: 36px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 16px;
+                flex-shrink: 0;
+              }
+              .delete-btn:hover {
+                background: #fee2e2;
+                color: #dc2626;
+              }
+              .segment-number {
+                width: 32px;
+                height: 32px;
+                background: #d1fae5;
+                color: #059669;
+                border-radius: 50%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-weight: 600;
+                font-size: 14px;
+              }
+              .zone-badge {
+                display: inline-block;
+                padding: 2px 8px;
+                font-size: 12px;
+                border: 1px solid #e5e7eb;
+                border-radius: 4px;
+                margin-top: 4px;
+                background: white;
+                color: #6b7280;
+                text-transform: capitalize;
+              }
+            </style>
+          </head>
+          <body>
+            <h2>Quick Tagging Dashboard</h2>
+            <p style="color: #64748b; margin-bottom: 20px;">Use this window for tagging while watching the video in the main window</p>
+            <div style="margin-bottom: 20px;">
+              <p style="font-weight: 600; margin-bottom: 8px;">Current Time: <span id="current-time">--:--</span></p>
+              <p style="color: #64748b; font-size: 14px;">Synced with video player</p>
+            </div>
+            <div style="margin-bottom: 20px;">
+              <strong style="display: block; margin-bottom: 8px;">Field Zone</strong>
+              <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;">
+                <button class="zone-btn" onclick="window.selectZone('defending')">Defending</button>
+                <button class="zone-btn" onclick="window.selectZone('midfield')">Midfield</button>
+                <button class="zone-btn" onclick="window.selectZone('attacking')">Attacking</button>
+                <button class="zone-btn" onclick="window.selectZone('transition')">Transition</button>
+              </div>
+              <p id="selected-zone" style="margin-top: 8px; color: #64748b; font-size: 14px;">No zone selected</p>
+            </div>
+            <div style="margin-bottom: 20px;">
+              <strong style="display: block; margin-bottom: 8px;">Player Involvement</strong>
+              <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;">
+                <button class="tag-btn success" onclick="window.opener.handleTagFromPopup('involved_start')">▶ Start</button>
+                <button class="tag-btn danger" onclick="window.opener.handleTagFromPopup('involved_end')">⏸ End</button>
+              </div>
+            </div>
+            <div>
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                <strong>Tagged Pairs (<span id="segment-count">0</span>)</strong>
+                <span style="color: #10b981;">✂</span>
+              </div>
+              <div id="segments-list" style="max-height: 400px; overflow-y: auto;"></div>
+            </div>
+            <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #e2e8f0;">
+              <p style="font-size: 12px; color: #64748b; margin-bottom: 8px;">
+                <span id="segment-created-count">0</span> segments created
+              </p>
+              <button class="primary" style="width: 100%; padding: 12px; font-size: 16px;" onclick="window.opener.handleConfirmFromPopup()">
+                ✓ Confirm All & Create Analyst Task
+              </button>
+            </div>
+            <script>
+              let selectedZone = null;
+
+              window.selectZone = function(zone) {
+                selectedZone = zone;
+                document.querySelectorAll('.zone-btn').forEach(b => b.classList.remove('selected'));
+                event.target.classList.add('selected');
+                document.getElementById('selected-zone').textContent = 'Zone: ' + zone;
+                if (window.opener && window.opener.setSelectedZoneFromPopup) {
+                  window.opener.setSelectedZoneFromPopup(zone);
+                }
+              };
+
+              window.addEventListener('message', function(event) {
+                if (event.data.type === 'UPDATE_TIME') {
+                  const time = event.data.time;
+                  const m = Math.floor(time / 60);
+                  const s = Math.floor(time % 60);
+                  document.getElementById('current-time').textContent = 
+                    m.toString().padStart(2, '0') + ':' + s.toString().padStart(2, '0');
+                }
+                if (event.data.type === 'UPDATE_SEGMENTS') {
+                  const involvedStarts = event.data.involvedStarts || [];
+                  const involvedEnds = event.data.involvedEnds || [];
+                  const pairCount = Math.min(involvedStarts.length, involvedEnds.length);
+                  const segmentsCreated = event.data.segmentsCreated || 0;
+                  document.getElementById('segment-count').textContent = pairCount;
+                  document.getElementById('segment-created-count').textContent = segmentsCreated;
+                  const list = document.getElementById('segments-list');
+                  if (involvedStarts.length === 0 && involvedEnds.length === 0) {
+                    list.innerHTML = '<p style="color: #94a3b8; text-align: center; padding: 32px 0; font-size: 14px;">No tags yet.<br/>Mark player involvement start and end times.</p>';
+                  } else {
+                    const formatTime = (s) => {
+                      const m = Math.floor(s / 60);
+                      const sec = Math.floor(s % 60);
+                      return m.toString().padStart(2, '0') + ':' + sec.toString().padStart(2, '0');
+                    };
+                    let html = '';
+                    for (let idx = 0; idx < pairCount; idx++) {
+                      const start = involvedStarts[idx];
+                      const end = involvedEnds[idx];
+                      html += \`
+                        <div class="segment-item">
+                          <div style="display: flex; align-items: center; gap: 12px;">
+                            <div class="segment-number">\${idx + 1}</div>
+                            <div>
+                              <p style="font-weight: 600; font-size: 14px; margin: 0;">
+                                \${formatTime(start.timestamp)} - \${formatTime(end.timestamp)}
+                              </p>
+                              \${start.zone ? '<span class="zone-badge">' + start.zone + '</span>' : ''}
+                            </div>
+                          </div>
+                          <button class="delete-btn" onclick="window.opener.deleteTagPairFromPopup('\${start.id}', '\${end.id}')">🗑️</button>
+                        </div>
+                      \`;
+                    }
+                    if (involvedStarts.length > involvedEnds.length) {
+                      const lastStart = involvedStarts[involvedStarts.length - 1];
+                      html += \`
+                        <div class="segment-item" style="background: #fef3c7; border: 1px solid #fbbf24;">
+                          <div style="display: flex; align-items: center; gap: 12px;">
+                            <div class="segment-number" style="background: #fef3c7; color: #92400e; border: 2px solid #fbbf24;">\${pairCount + 1}</div>
+                            <div>
+                              <p style="font-weight: 600; font-size: 14px; margin: 0; color: #92400e;">
+                                \${formatTime(lastStart.timestamp)} - <span style="font-style: italic;">Waiting for End</span>
+                              </p>
+                              \${lastStart.zone ? '<span class="zone-badge" style="background: #fef3c7; color: #92400e; border-color: #fbbf24;">' + lastStart.zone + '</span>' : ''}
+                            </div>
+                          </div>
+                          <div style="width: 8px; height: 8px; background: #f59e0b; border-radius: 50%; animation: pulse 2s infinite;"></div>
+                        </div>
+                      \`;
+                    }
+                    list.innerHTML = html;
+                  }
+                }
+              });
+            </script>
+          </body>
+        </html>
       `);
       popupWindow.document.close();
-      const sync = () => {
+
+      const updatePopup = () => {
         if (popupWindow && !popupWindow.closed) {
-          const mt = this.getMatchTime(this.state.currentTime);
-          const starts = this.state.tags.filter(t=>t.tag_type==='involved_start'), ends = this.state.tags.filter(t=>t.tag_type==='involved_end');
-          popupWindow.postMessage({ type:'UPDATE_TIME', time:mt }, '*');
-          popupWindow.postMessage({ type:'UPDATE_DATA', involvedStarts:starts, involvedEnds:ends, pendingSegments:this.state.pendingSegments, hasPendingStart:starts.length>ends.length, lastStartTime:starts.length>ends.length?starts[starts.length-1].timestamp:null, currentZone:this.state.selectedZone, segments:this.state.segments }, '*');
-          requestAnimationFrame(sync);
+          popupWindow.postMessage({ 
+            type: 'UPDATE_TIME', 
+            time: this.getMatchTime(this.state.currentTime) 
+          }, '*');
+          
+          const involvedStarts = this.state.tags.filter(t => t.tag_type === 'involved_start');
+          const involvedEnds = this.state.tags.filter(t => t.tag_type === 'involved_end');
+          popupWindow.postMessage({ 
+            type: 'UPDATE_SEGMENTS', 
+            involvedStarts: involvedStarts,
+            involvedEnds: involvedEnds,
+            segmentsCreated: this.state.segments.length
+          }, '*');
+          requestAnimationFrame(updatePopup);
         }
       };
-      sync();
+      updatePopup();
     }
   };
 
-  updatePopupSegments = () => {};
-  setupPopupHandlers = () => {
-    window.handleTagFromPopup = (t) => this.handleAddTag(t);
-    window.setSelectedZoneFromPopup = (z) => this.setState({ selectedZone:z });
-    window.handleCreatePendingSegmentFromPopup = (i) => { const s=this.state.tags.filter(t=>t.tag_type==='involved_start'), e=this.state.tags.filter(t=>t.tag_type==='involved_end'); if(s[i]&&e[i]) this.handleCreatePendingSegment(s[i],e[i]); };
-    window.deleteTagPairFromPopup = async (sid, eid) => {
-      const s=this.state.tags.find(t=>t.id==sid), en=this.state.tags.find(t=>t.id==eid);
-      if(s&&en) {
-        const ms = this.state.segments.find(seg=>Math.abs(seg.start_time-s.timestamp/1000)<0.5);
-        if(ms) await videoSegmentService.delete(ms.id);
-      }
-      this.handleRemovePendingSegment(sid,eid); 
-      await videoTagService.delete(sid); 
-      await videoTagService.delete(eid);
-      await this.loadTags(); 
-      await this.loadSegments();
-    };
-    window.handleConfirmFromPopup = () => this.handleConfirmPlayerVideo();
-  };
-
-  cleanupPopupHandlers = () => { delete window.handleTagFromPopup; delete window.setSelectedZoneFromPopup; delete window.deleteTagPairFromPopup; delete window.handleConfirmFromPopup; };
-
-  createProcessingTask = async () => {
-    try {
-      const task = await videoTaskService.create({ video_id: this.state.video.id, task_type: 'video_processing', status: 'pending_processing', priority: this.state.taskPriority });
-      this.setState({ task, isNewVideo: false, showCreateTaskDialog: false });
-    } catch (e) {}
+  updatePopupSegments = () => {
+    if (this.popupWindowRef.current && !this.popupWindowRef.current.closed) {
+      const involvedStarts = this.state.tags.filter(t => t.tag_type === 'involved_start');
+      const involvedEnds = this.state.tags.filter(t => t.tag_type === 'involved_end');
+      this.popupWindowRef.current.postMessage({ 
+        type: 'UPDATE_SEGMENTS', 
+        involvedStarts: involvedStarts,
+        involvedEnds: involvedEnds
+      }, '*');
+    }
   };
 
   render() {
     const { taskId, navigate } = this.props;
-    const { allTasks, allVideos, task, video, tags, segments, allTasksLoading, taskLoading, videoLoading, isPlaying, currentTime, duration, matchStartSet, matchStartTime, selectedZone, showTaggingDialog, pendingSegments, searchTerm, statusFilter, playUntilTime, showGallery } = this.state;
-    const invS = tags.filter(t => t.tag_type === 'involved_start'), invE = tags.filter(t => t.tag_type === 'involved_end');
-    const zones = [ { id: 'defending', label: 'Defending', color: 'bg-red-500' }, { id: 'midfield', label: 'Midfield', color: 'bg-amber-500' }, { id: 'attacking', label: 'Attacking', color: 'bg-emerald-500' }, { id: 'transition', label: 'Transition', color: 'bg-purple-500' } ];
+    const {
+      allTasks,
+      allVideos,
+      task,
+      video,
+      tags,
+      segments,
+      allTasksLoading,
+      taskLoading,
+      videoLoading,
+      isPlaying,
+      currentTime,
+      duration,
+      matchStartSet,
+      matchStartTime,
+      selectedZone,
+      noteText,
+      showTaggingDialog,
+      showGallery,
+      pendingSegments,
+      searchTerm,
+      statusFilter,
+      playUntilTime
+    } = this.state;
+
+    const involvedStarts = tags.filter(t => t.tag_type === 'involved_start');
+    const involvedEnds = tags.filter(t => t.tag_type === 'involved_end');
+    const hasPendingStart = involvedStarts.length > involvedEnds.length;
+    const lastStartTime = hasPendingStart ? involvedStarts[involvedStarts.length - 1]?.timestamp : null;
+
+    const zones = [
+      { id: 'defending', label: 'Defending', color: 'bg-red-500' },
+      { id: 'midfield', label: 'Midfield', color: 'bg-amber-500' },
+      { id: 'attacking', label: 'Attacking', color: 'bg-emerald-500' },
+      { id: 'transition', label: 'Transition', color: 'bg-purple-500' }
+    ];
 
     if (!taskId) {
-      if (allTasksLoading) return <div className="p-8 text-center"><Skeleton className="h-10 w-48 mb-4"/><div className="grid grid-cols-3 gap-4"><Skeleton className="h-32"/><Skeleton className="h-32"/><Skeleton className="h-32"/></div></div>;
-      const filtered = allTasks.filter(t => t.status.includes(searchTerm) || statusFilter === 'all' || t.status === statusFilter);
-      return (
-        <div className="p-6 space-y-6 max-w-7xl mx-auto">
-          <div className="flex justify-between items-center">
-            <h1 className="text-2xl font-bold text-slate-900">Video Editor Tasks</h1>
-            <Button onClick={() => navigate(createPageUrl('UploadVideo'))} className="bg-emerald-600 hover:bg-emerald-700">Upload Video</Button>
+      if (allTasksLoading) {
+        return (
+          <div className="space-y-6">
+            <Skeleton className="h-24 rounded-xl" />
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <Skeleton className="h-48 rounded-xl" />
+              <Skeleton className="h-48 rounded-xl" />
+              <Skeleton className="h-48 rounded-xl" />
+            </div>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filtered.map(t => {
-              const v = allVideos.find(vid=>vid.id===t.video_id);
-              return (
-                <Card key={t.id} className="cursor-pointer hover:shadow-lg transition-shadow border-slate-200" onClick={() => navigate(createPageUrl('VideoEditor') + `?taskId=${t.id}`)}>
-                  <CardHeader><CardTitle className="text-lg font-bold text-slate-800">{v?.title || 'Processing Task'}</CardTitle></CardHeader>
-                  <CardContent>
-                    <div className="space-y-3">
-                      <div className="flex justify-between items-center">
-                        <Badge variant="secondary" className="bg-slate-100 text-slate-700">{t.status.replace(/_/g, ' ')}</Badge>
-                        <span className="text-xs text-slate-500">{new Date(t.created_at).toLocaleDateString()}</span>
+        );
+      }
+
+      const filteredTasks = allTasks.filter(task => {
+        const video = allVideos.find(v => v.id === task.video_id);
+        const matchesSearch = searchTerm === '' || 
+          task.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          task.video_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (task.assigned_to && task.assigned_to.toLowerCase().includes(searchTerm.toLowerCase())) ||
+          (video?.title && video.title.toLowerCase().includes(searchTerm.toLowerCase())) ||
+          (video?.player_name && video.player_name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+          (video?.home_team && video.home_team.toLowerCase().includes(searchTerm.toLowerCase())) ||
+          (video?.away_team && video.away_team.toLowerCase().includes(searchTerm.toLowerCase()));
+        
+        const matchesStatus = statusFilter === 'all' || task.status === statusFilter;
+        
+        return matchesSearch && matchesStatus;
+      });
+
+      return (
+        <div className="space-y-6">
+          <div>
+            <h2 className="text-2xl font-bold text-slate-900">Video Editor Tasks</h2>
+            <p className="text-slate-500 mt-1">Select a task to start editing</p>
+          </div>
+
+          <div className="flex gap-4">
+            <div className="flex-1">
+              <Input
+                placeholder="Search by video title, player name, match, or assigned user..."
+                value={searchTerm}
+                onChange={(e) => this.setState({ searchTerm: e.target.value })}
+                className="w-full"
+              />
+            </div>
+            <select
+              value={statusFilter}
+              onChange={(e) => this.setState({ statusFilter: e.target.value })}
+              className="px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            >
+              <option value="all">All Status</option>
+              <option value="pending_processing">Pending Processing</option>
+              <option value="pending_assignment">Pending Assignment</option>
+              <option value="assigned">Assigned</option>
+              <option value="in_progress">In Progress</option>
+              <option value="completed">Completed</option>
+            </select>
+          </div>
+
+          {filteredTasks.length === 0 && allTasks.length > 0 ? (
+            <Card className="border-0 shadow-sm">
+              <CardContent className="flex flex-col items-center justify-center py-12">
+                <Video className="w-16 h-16 text-slate-300 mb-4" />
+                <p className="text-slate-500 text-lg mb-2">No tasks match your filters</p>
+                <p className="text-sm text-slate-400">Try adjusting your search or filters</p>
+              </CardContent>
+            </Card>
+          ) : allTasks.length === 0 ? (
+            <Card className="border-0 shadow-sm">
+              <CardContent className="flex flex-col items-center justify-center py-12">
+                <Video className="w-16 h-16 text-slate-300 mb-4" />
+                <p className="text-slate-500 text-lg mb-2">No video editor tasks available</p>
+                <p className="text-sm text-slate-400">Upload a video to create a new task</p>
+                <Button className="mt-4" onClick={() => navigate(createPageUrl('UploadVideo'))}>
+                  Upload Video
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredTasks.map((task) => {
+                const video = allVideos.find(v => v.id === task.video_id);
+                const statusColors = {
+                  pending_processing: 'bg-slate-100 text-slate-700',
+                  pending_assignment: 'bg-amber-100 text-amber-700',
+                  assigned: 'bg-blue-100 text-blue-700',
+                  in_progress: 'bg-purple-100 text-purple-700',
+                  completed: 'bg-emerald-100 text-emerald-700'
+                };
+
+                return (
+                  <Card
+                    key={task.id}
+                    className="border-0 shadow-sm hover:shadow-md transition-shadow cursor-pointer group"
+                    onClick={() => navigate(createPageUrl('VideoEditor') + `?taskId=${task.id}`)}
+                  >
+                    <CardHeader>
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <CardTitle className="text-base group-hover:text-emerald-600 transition-colors">
+                            {video?.title || 'Untitled Video'}
+                          </CardTitle>
+                          <p className="text-sm text-slate-500 mt-1">
+                            {new Date(task.created_at).toLocaleDateString()}
+                          </p>
+                        </div>
+                        <Badge className={statusColors[task.status]}>
+                          {task.status.replace(/_/g, ' ')}
+                        </Badge>
                       </div>
-                      {v && <div className="text-sm text-slate-600 flex items-center gap-2"><Video className="w-4 h-4"/>{v.home_team} vs {v.away_team}</div>}
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2 text-sm">
+                        {video?.home_team && video?.away_team && (
+                          <div className="flex items-center gap-2 text-slate-600">
+                            <Video className="w-4 h-4" />
+                            <span>{video.home_team} vs {video.away_team}</span>
+                          </div>
+                        )}
+                        {video?.player_name && (
+                          <div className="flex items-center gap-2 text-slate-600">
+                            <User className="w-4 h-4" />
+                            <span>{video.player_name}</span>
+                          </div>
+                        )}
+                        {task.assigned_to && (
+                          <div className="flex items-center gap-2 text-slate-500 text-xs">
+                            <span>Assigned to: {task.assigned_to}</span>
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    if (taskLoading || videoLoading) {
+      return (
+        <div className="space-y-6">
+          <Skeleton className="h-[400px] rounded-xl" />
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <Skeleton className="h-48 rounded-xl lg:col-span-2" />
+            <Skeleton className="h-48 rounded-xl" />
           </div>
         </div>
       );
     }
 
-    if (taskLoading || videoLoading) return <div className="p-8 text-center space-y-4"><Skeleton className="h-8 w-64 mx-auto"/><Skeleton className="h-[400px] w-full rounded-xl"/></div>;
-
     return (
-      <div className="p-6 space-y-6 max-w-7xl mx-auto">
-        <Dialog open={this.state.showCreateTaskDialog} onOpenChange={o=>this.setState({showCreateTaskDialog:o})}>
-          <DialogContent className="sm:max-w-[425px]">
-            <DialogHeader><DialogTitle>Create Processing Task</DialogTitle><DialogDescription>Start the processing workflow for this video.</DialogDescription></DialogHeader>
-            <div className="py-4"><Button onClick={this.createProcessingTask} className="w-full bg-emerald-600 hover:bg-emerald-700">Confirm and Create Task</Button></div>
+      <div className="space-y-6">
+        {/* Create Task Dialog for New Videos */}
+        <Dialog open={this.state.showCreateTaskDialog} onOpenChange={(open) => this.setState({ showCreateTaskDialog: open })}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+                Create Processing Task
+              </DialogTitle>
+              <DialogDescription>
+                Configure and create a new processing task for this video
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div>
+                <h3 className="font-semibold text-slate-900 mb-3">Video Details</h3>
+                <div className="bg-slate-50 rounded-lg p-3 space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-slate-600">Title:</span>
+                    <span className="font-medium">{this.state.video?.title}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-600">Player:</span>
+                    <span className="font-medium">{this.state.video?.player_name}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-600">Match:</span>
+                    <span className="font-medium">{this.state.video?.home_team} vs {this.state.video?.away_team}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-slate-700">Task Priority</label>
+                <select
+                  value={this.state.taskPriority}
+                  onChange={(e) => this.setState({ taskPriority: e.target.value })}
+                  className="mt-2 w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                >
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                </select>
+              </div>
+
+              <div className="pt-4 flex gap-3">
+                <Button
+                  variant="outline"
+                  onClick={() => this.setState({ showCreateTaskDialog: false })}
+                  className="flex-1"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={this.createProcessingTask}
+                  disabled={this.state.taskLoading}
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+                >
+                  {this.state.taskLoading ? 'Creating...' : 'Create Task'}
+                </Button>
+              </div>
+            </div>
           </DialogContent>
         </Dialog>
 
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        {/* Video Info Header */}
+        <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-2xl font-bold text-slate-900">{video?.title}</h2>
-            <p className="text-slate-500 flex items-center gap-2">{video?.home_team} vs {video?.away_team} • {video?.player_name} #{video?.jersey_number}</p>
+            <h2 className="text-xl font-bold text-slate-900">{video?.title}</h2>
+            <p className="text-slate-500">
+              {video?.home_team} vs {video?.away_team} • {video?.player_name} #{video?.jersey_number}
+            </p>
           </div>
           <div className="flex items-center gap-3">
-            <Button onClick={()=>this.setState({showGallery:true})} variant="outline" className="gap-2"><User className="w-4 h-4"/>Gallery</Button>
-            <Button onClick={()=>this.setState({showTaggingDialog:true})} className="bg-[#0D6D5D] hover:bg-[#0A5A4D] text-white"><MapPin className="w-4 h-4 mr-2"/>Open Tagging Dashboard</Button>
-            <Badge className="bg-amber-100 text-amber-700 border-amber-200">{task?.status.replace(/_/g, ' ')}</Badge>
+            {video?.sample_frames && video.sample_frames.length > 0 && (
+              <Button
+                onClick={() => this.setState({ showGallery: true })}
+                variant="outline"
+                className="gap-2"
+              >
+                <User className="w-4 h-4" />
+                View Player Identification Gallery
+                <span className="ml-1 px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded text-xs">
+                  {video.sample_frames.filter(f => f.annotation).length}/{video.sample_frames.length}
+                </span>
+              </Button>
+            )}
+            {task && (
+              <>
+                <Button 
+                  onClick={() => this.setState({ showTaggingDialog: true })}
+                  className="bg-emerald-600 hover:bg-emerald-700"
+                >
+                  <MapPin className="w-4 h-4 mr-2" />
+                  Open Tagging Dashboard
+                </Button>
+                <Badge className={task?.status === 'in_progress' ? 'bg-purple-100 text-purple-700' : 'bg-amber-100 text-amber-700'}>
+                  {task?.status?.replace(/_/g, ' ')}
+                </Badge>
+              </>
+            )}
+            {!task && (
+              <Button 
+                onClick={() => this.setState({ showCreateTaskDialog: true })}
+                className="bg-emerald-600 hover:bg-emerald-700"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Create Processing Task
+              </Button>
+            )}
           </div>
         </div>
 
-        <Card className="overflow-hidden bg-[#0F172A] border-0 shadow-2xl rounded-xl">
-          <div className="relative group">
-            <video ref={this.videoRef} src={video?.url ? (video.url.startsWith('http')?video.url:'/'+video.url) : ''} className="w-full max-h-[600px] object-contain mx-auto"
-              onTimeUpdate={()=>{const t=this.videoRef.current.currentTime; this.setState({currentTime:t}); if(playUntilTime && this.getMatchTime(t)>=playUntilTime){this.videoRef.current.pause(); this.setState({isPlaying:false,playUntilTime:null});}}}
-              onLoadedMetadata={()=>this.setState({duration:this.videoRef.current.duration})}
-              onPlay={()=>this.setState({isPlaying:true})} onPause={()=>this.setState({isPlaying:false})}
-            />
-            <div className="absolute top-4 left-4 bg-black/60 text-white px-3 py-1 rounded-md font-mono text-sm backdrop-blur-sm border border-white/10">{this.formatTime(currentTime)}</div>
-          </div>
-          <CardContent className="bg-[#1E293B] p-4 space-y-4">
-            <Slider value={[currentTime]} max={duration} step={0.1} onValueChange={this.handleSeek} className="cursor-pointer" />
-            <div className="flex justify-between items-center text-white">
-              <div className="flex items-center gap-4">
-                <Button size="icon" variant="ghost" onClick={()=>this.handleSkip(-5)} className="hover:bg-white/10"><ChevronLeft/></Button>
-                <Button size="icon" onClick={this.handlePlayPause} className="bg-white text-[#0F172A] hover:bg-white/90 rounded-full w-12 h-12 shadow-lg">{isPlaying?<Pause className="fill-current"/>:<Play className="fill-current ml-1"/>}</Button>
-                <Button size="icon" variant="ghost" onClick={()=>this.handleSkip(5)} className="hover:bg-white/10"><ChevronRight/></Button>
-                <div className="text-slate-400 font-mono text-sm ml-4">{this.formatTime(currentTime)} / {this.formatTime(duration)}</div>
-              </div>
-              {!matchStartSet && <Button onClick={this.handleSetMatchStart} className="bg-[#10B981] hover:bg-[#059669] gap-2"><Flag className="w-4 h-4"/>Set Match Start</Button>}
-            </div>
-          </CardContent>
-        </Card>
+        {/* Video Player */}
+        <Card className="overflow-hidden border-0 shadow-lg">
+          <div className="bg-black relative">
+            <video
+              ref={this.videoRef}
+              src={video?.url ? (video.url.startsWith('http') ? video.url : `/${video.url}`) : video?.file_url}
+              className="w-full h-[400px] lg:h-[500px] object-contain"
+              onTimeUpdate={() => {
+                const currentTime = this.videoRef.current?.currentTime || 0;
+                this.setState({ currentTime });
 
-        <Card className="border-slate-200 shadow-sm overflow-hidden rounded-xl">
-          <CardHeader className="bg-slate-50/50 border-b border-slate-100 py-3"><CardTitle className="text-xs font-bold text-slate-500 uppercase flex items-center gap-2"><Video className="w-4 h-4"/>Player Segments</CardTitle></CardHeader>
-          <CardContent className="p-4 bg-white">
-            <EnhancedTimeline segments={segments} duration={duration} currentTime={this.getMatchTime(currentTime)} matchStartTime={matchStartTime}
-              onSeek={t=>{if(this.videoRef.current)this.videoRef.current.currentTime=t+matchStartTime;}}
-              onPlaySegment={s=>{if(this.videoRef.current){this.videoRef.current.currentTime=s.start_time+matchStartTime; this.videoRef.current.play(); this.setState({isPlaying:true,playUntilTime:s.end_time});}}}
-              onDeleteSegment={async id=>{
-                const s=segments.find(seg=>seg.id===id); 
-                if(s){
-                  const st=tags.find(t=>t.tag_type==='involved_start'&&Math.abs(t.timestamp/1000-s.start_time)<0.5), 
-                        et=tags.find(t=>t.tag_type==='involved_end'&&Math.abs(t.timestamp/1000-s.end_time)<0.5); 
-                  if(st)await videoTagService.delete(st.id); if(et)await videoTagService.delete(et.id);
-                } 
-                await videoSegmentService.delete(id); await this.loadTags(); await this.loadSegments();
+                if (playUntilTime !== null && this.getMatchTime(currentTime) >= playUntilTime) {
+                  this.videoRef.current?.pause();
+                  this.setState({ isPlaying: false, playUntilTime: null });
+                }
               }}
+              onLoadedMetadata={() => {
+                const duration = this.videoRef.current?.duration || 0;
+                this.setState({ duration });
+                console.log("Video loaded, duration:", duration);
+              }}
+              onPlay={() => this.setState({ isPlaying: true })}
+              onPause={() => this.setState({ isPlaying: false })}
+              onError={(e) => console.error("Video player error:", e)}
             />
-          </CardContent>
-        </Card>
 
-        <div className="space-y-4">
-          <div className="flex items-center gap-2 text-slate-700 font-bold"><Clock className="w-5 h-5 text-emerald-600"/>Timeline Events ({segments.length})</div>
-          {segments.length === 0 ? (
-            <div className="p-12 text-center border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50/50">
-              <Clock className="w-12 h-12 text-slate-300 mx-auto mb-3"/>
-              <p className="text-slate-500 font-medium">No segments created yet</p>
-              <p className="text-sm text-slate-400">Use the tagging dashboard to mark player involvement segments</p>
+            {/* Time Overlay */}
+            <div className="absolute top-4 left-4 bg-black/70 text-white px-3 py-1.5 rounded-lg font-mono text-sm">
+              {matchStartSet && (
+                <span className="text-emerald-400 mr-2">Match:</span>
+              )}
+              {this.formatTime(this.getMatchTime(currentTime))}
             </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {segments.map((s,i)=>(
-                <Card key={s.id} className="group hover:border-emerald-500 transition-colors cursor-pointer overflow-hidden border-slate-200" onClick={()=>this.videoRef.current.currentTime = s.start_time + matchStartTime}>
-                  <div className="flex h-24">
-                    <div className="w-2/5 bg-emerald-600 flex flex-col items-center justify-center text-white p-2">
-                      <div className="text-xs font-mono opacity-80">{this.formatTime(s.start_time).substring(3)}</div>
-                      <div className="text-2xl font-bold">{i+1}</div>
-                      <div className="text-[10px] font-bold uppercase tracking-wider">Segment</div>
-                    </div>
-                    <div className="flex-1 p-3 flex flex-col justify-between bg-white">
-                      <div className="flex justify-between items-start">
-                        <span className="text-xs font-mono text-slate-500">{this.formatTime(s.end_time).substring(3)}</span>
-                        <Badge variant="outline" className="text-[10px] uppercase font-bold text-slate-500 border-slate-300 group-hover:border-emerald-300">{s.zone}</Badge>
-                      </div>
-                      <div className="text-sm font-bold text-slate-800">Player Segment</div>
-                    </div>
-                  </div>
-                </Card>
+          </div>
+
+          {/* Controls */}
+          <CardContent className="p-4 bg-slate-900 space-y-4">
+            {/* Playback Timeline */}
+            <div className="relative">
+              <Slider
+                value={[currentTime]}
+                max={duration}
+                step={0.1}
+                onValueChange={this.handleSeek}
+                className="w-full"
+              />
+              {segments.map((seg, idx) => (
+                <div
+                  key={seg.id}
+                  className="absolute top-0 h-2 bg-emerald-500/50 rounded"
+                  style={{
+                    left: `${((seg.start_time + matchStartTime) / duration) * 100}%`,
+                    width: `${((seg.end_time - seg.start_time) / duration) * 100}%`
+                  }}
+                />
               ))}
             </div>
-          )}
-        </div>
 
-        <Dialog open={showTaggingDialog} onOpenChange={o=>this.setState({showTaggingDialog:o})}>
-          <DialogContent className="max-w-4xl bg-white p-0 overflow-hidden rounded-2xl border-0 shadow-2xl">
-            <div className="bg-slate-50 border-b border-slate-100 p-6 flex justify-between items-center">
-              <div><DialogTitle className="text-xl font-bold text-slate-900 flex items-center gap-2"><MapPin className="text-emerald-600"/>Tagging Dashboard</DialogTitle><DialogDescription>Mark segments</DialogDescription></div>
-              <Button variant="outline" onClick={this.handlePopOutDashboard} className="shadow-sm border-slate-200 bg-white"><ExternalLink className="w-4 h-4 mr-2"/>Pop Out</Button>
+            {/* Playback Controls */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Button size="icon" variant="ghost" onClick={() => this.handleSkip(-10)} className="text-white hover:bg-white/20">
+                  <SkipBack className="w-5 h-5" />
+                </Button>
+                <Button size="icon" variant="ghost" onClick={() => this.handleSkip(-5)} className="text-white hover:bg-white/20">
+                  <ChevronLeft className="w-5 h-5" />
+                </Button>
+                <Button size="icon" onClick={this.handlePlayPause} className="bg-white text-slate-900 hover:bg-white/90 w-12 h-12">
+                  {isPlaying ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6 ml-0.5" />}
+                </Button>
+                <Button size="icon" variant="ghost" onClick={() => this.handleSkip(5)} className="text-white hover:bg-white/20">
+                  <ChevronRight className="w-5 h-5" />
+                </Button>
+                <Button size="icon" variant="ghost" onClick={() => this.handleSkip(10)} className="text-white hover:bg-white/20">
+                  <SkipForward className="w-5 h-5" />
+                </Button>
+              </div>
+
+              <div className="text-white font-mono text-sm">
+                {this.formatTime(currentTime)} / {this.formatTime(duration)}
+              </div>
+
+              {!matchStartSet && (
+                <Button onClick={this.handleSetMatchStart} className="bg-emerald-600 hover:bg-emerald-700">
+                  <Flag className="w-4 h-4 mr-2" />
+                  Set Match Start
+                </Button>
+              )}
             </div>
-            <div className="p-6 grid grid-cols-2 gap-8">
-              <div className="space-y-6">
-                <div><label className="text-sm font-bold text-slate-500 uppercase mb-3 block">Field Zones</label>
-                  <div className="grid grid-cols-2 gap-3">{zones.map(z=>(<Button key={z.id} variant={selectedZone===z.id?'default':'outline'} className={`${selectedZone===z.id?z.color:'bg-white'} border-2 rounded-xl h-12 font-bold`} onClick={()=>this.setState({selectedZone:z.id})}>{z.label}</Button>))}</div>
+
+            {/* Player Segments Timeline */}
+            <div className="pt-4 border-t border-slate-700">
+              <EnhancedTimeline
+                segments={segments}
+                duration={duration}
+                currentTime={this.getMatchTime(currentTime)}
+                matchStartTime={matchStartTime}
+                onSeek={(time) => {
+                  if (this.videoRef.current) {
+                    this.videoRef.current.currentTime = time + matchStartTime;
+                  }
+                }}
+                onPlaySegment={(segment) => {
+                  if (this.videoRef.current) {
+                    this.videoRef.current.currentTime = segment.start_time + matchStartTime;
+                    this.videoRef.current.play();
+                    this.setState({ isPlaying: true, playUntilTime: segment.end_time });
+                  }
+                }}
+                onUpdateSegment={async (id, data) => {
+                  // Convert seconds back to milliseconds for database
+                  const dbData = {};
+                  if (data.start_time !== undefined) dbData.start_time = Math.round(data.start_time * 1000);
+                  if (data.end_time !== undefined) dbData.end_time = Math.round(data.end_time * 1000);
+                  await videoSegmentService.update(id, dbData);
+                  await this.loadSegments();
+                }}
+                onDeleteSegment={async (id) => {
+                  try {
+                    const segment = segments.find(seg => seg.id === id);
+                    if (!segment) return;
+
+                    const matchingStartTag = tags.find(t => 
+                      t.tag_type === 'involved_start' && 
+                      Math.abs(t.timestamp / 1000 - segment.start_time) < 0.5
+                    );
+                    const matchingEndTag = tags.find(t => 
+                      t.tag_type === 'involved_end' && 
+                      Math.abs(t.timestamp / 1000 - segment.end_time) < 0.5
+                    );
+
+                    if (matchingStartTag) {
+                      await videoTagService.delete(matchingStartTag.id).catch(() => {});
+                    }
+                    if (matchingEndTag) {
+                      await videoTagService.delete(matchingEndTag.id).catch(() => {});
+                    }
+
+                    await videoSegmentService.delete(id).catch(() => {});
+                    
+                    await this.loadTags();
+                    await this.loadSegments();
+                  } catch (error) {}
+                }}
+                onEditSegment={(segment) => {
+                  if (this.videoRef.current) {
+                    this.videoRef.current.currentTime = segment.start_time + matchStartTime;
+                  }
+                  if (segment.zone) {
+                    this.setState({ selectedZone: segment.zone });
+                  }
+                  this.setState({ showTaggingDialog: true });
+                }}
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Player Identification Gallery */}
+        {showGallery && video?.sample_frames && (
+          <PlayerIdentificationGallery
+            frames={video.sample_frames}
+            playerName={video.player_name}
+            onClose={() => this.setState({ showGallery: false })}
+          />
+        )}
+
+        {/* Tagging Dashboard Dialog */}
+        <Dialog open={showTaggingDialog} onOpenChange={(open) => this.setState({ showTaggingDialog: open })}>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-white">
+            <DialogHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <DialogTitle className="flex items-center gap-2">
+                    <MapPin className="w-5 h-5 text-emerald-500" />
+                    Quick Tagging Dashboard
+                  </DialogTitle>
+                  <DialogDescription>
+                    Mark player involvement periods and create segments for analysis
+                  </DialogDescription>
                 </div>
-                <div><label className="text-sm font-bold text-slate-500 uppercase mb-3 block">Player Involvement</label>
-                  <div className="flex gap-3">
-                    <Button variant="outline" className="flex-1 border-2 border-emerald-500 text-emerald-700 hover:bg-emerald-50 h-14 font-bold rounded-xl" onClick={()=>this.handleAddTag('involved_start')}><Play className="mr-2 w-5 h-5 fill-current"/>Start</Button>
-                    <Button variant="outline" className="flex-1 border-2 border-red-500 text-red-700 hover:bg-red-50 h-14 font-bold rounded-xl" onClick={()=>this.handleAddTag('involved_end')} disabled={invS.length<=invE.length}><Pause className="mr-2 w-5 h-5 fill-current"/>End</Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={this.handlePopOutDashboard}
+                  className="gap-2"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  Pop Out (Dual Monitor)
+                </Button>
+              </div>
+            </DialogHeader>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 py-4">
+              {/* Left Column - Tagging Controls */}
+              <div className="space-y-6">
+                {/* Zone Selection */}
+                <div>
+                  <p className="text-sm font-medium text-slate-700 mb-3">Field Zone</p>
+                  <div className="grid grid-cols-4 gap-2">
+                    {zones.map(zone => (
+                      <Button
+                        key={zone.id}
+                        variant={selectedZone === zone.id ? 'default' : 'outline'}
+                        className={selectedZone === zone.id ? zone.color : ''}
+                        onClick={() => this.setState({ selectedZone: zone.id })}
+                      >
+                        {zone.label}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Player Involvement Markers */}
+                <div>
+                  <div className="mb-3">
+                    <p className="text-sm font-medium text-slate-700 mb-2">Player Involvement</p>
+                    {hasPendingStart && (
+                      <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 mb-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
+                            <span className="text-sm font-medium text-emerald-700">Start Marked</span>
+                          </div>
+                          <span className="text-sm font-mono text-emerald-600">{this.formatTime(lastStartTime / 1000)}</span>
+                        </div>
+                        <p className="text-xs text-emerald-600 mt-1">Click "End" to complete the segment</p>
+                      </div>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      variant="outline"
+                      className={`${hasPendingStart ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-emerald-500 text-emerald-600'} hover:bg-emerald-50`}
+                      onClick={() => this.handleAddTag('involved_start')}
+                    >
+                      <Play className="w-4 h-4 mr-2" />
+                      Start
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="border-red-500 text-red-600 hover:bg-red-50"
+                      onClick={() => this.handleAddTag('involved_end')}
+                      disabled={!hasPendingStart}
+                    >
+                      <Pause className="w-4 h-4 mr-2" />
+                      End
+                    </Button>
                   </div>
                 </div>
               </div>
-              <div className="flex flex-col h-[400px]">
-                <label className="text-sm font-bold text-slate-500 uppercase mb-3 block">Tagged Pairs ({Math.min(invS.length,invE.length)})</label>
-                <div className="flex-1 space-y-3 overflow-y-auto pr-2">
-                  {invS.length === 0 ? <div className="h-full flex flex-col items-center justify-center text-slate-400 text-center"><Scissors className="w-12 h-12 mb-3 opacity-20"/><p>No tags marked yet</p></div> : 
-                  Array.from({length:Math.min(invS.length,invE.length)}).map((_,i)=>{
-                    const s=invS[i], en=invE[i], q=pendingSegments.find(ps=>ps.startTagId===s.id);
-                    return (
-                      <div key={i} className="p-4 border-2 border-slate-100 rounded-xl bg-slate-50/50 flex justify-between items-center hover:border-emerald-200 transition-colors">
-                        <div className="flex items-center gap-4">
-                          <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center font-bold text-slate-600">{i+1}</div>
-                          <div><p className="font-bold text-slate-800">{this.formatTime(s.timestamp/1000).substring(3)} - {this.formatTime(en.timestamp/1000).substring(3)}</p><Badge variant="outline" className="text-[10px] bg-white border-slate-300 text-slate-500">{s.zone}</Badge></div>
-                        </div>
-                        <div className="flex gap-2">
-                          <Button size="icon" variant="ghost" onClick={async()=>{await videoTagService.delete(s.id); await videoTagService.delete(en.id); await this.loadTags();}} className="hover:bg-red-50 text-red-500"><Trash2 className="w-5 h-5"/></Button>
-                          {!q && <Button size="sm" onClick={()=>this.handleCreatePendingSegment(s,en)} className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-4">+ Queue</Button>}
-                        </div>
-                      </div>
-                    );
-                  })}
+
+              {/* Right Column - Segments Preview */}
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-sm font-medium text-slate-700">Tagged Pairs ({Math.min(involvedStarts.length, involvedEnds.length)})</p>
+                  <Scissors className="w-4 h-4 text-emerald-500" />
                 </div>
-              </div>
-            </div>
-            <div className="p-6 bg-slate-50 border-t border-slate-100">
-              <div className="flex items-center justify-between mb-4">
-                <span className="text-sm font-bold text-slate-600">Queued Segments: {pendingSegments.length}</span>
-                {pendingSegments.length>0 && <Button className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-12 px-8 rounded-xl" onClick={this.handleConfirmPlayerVideo}>Confirm All and Create Analyst Task</Button>}
+                <div className="space-y-2 max-h-[250px] overflow-y-auto">
+                  {involvedStarts.length === 0 && involvedEnds.length === 0 ? (
+                    <p className="text-slate-500 text-center py-8 text-sm">
+                      No tags yet.<br/>
+                      Mark player involvement start and end times.
+                    </p>
+                  ) : (
+                    <>
+                    {Array.from({ length: Math.min(involvedStarts.length, involvedEnds.length) }).map((_, idx) => {
+                      const startTag = involvedStarts[idx];
+                      const endTag = involvedEnds[idx];
+                      const isPending = pendingSegments.find(seg => 
+                        seg.startTagId === startTag.id && seg.endTagId === endTag.id
+                      ) || segments.find(seg => 
+                        Math.abs(seg.start_time - startTag.timestamp / 1000) < 0.5 && 
+                        Math.abs(seg.end_time - endTag.timestamp / 1000) < 0.5
+                      );
+
+                      return (
+                        <div
+                          key={idx}
+                          className={`p-3 rounded-lg border-2 ${isPending ? 'bg-blue-50 border-blue-300' : 'bg-slate-50 border-slate-200'}`}
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-8 h-8 rounded-full flex items-center justify-center font-medium text-sm ${isPending ? 'bg-blue-600 text-white' : 'bg-slate-300 text-slate-600'}`}>
+                                {idx + 1}
+                              </div>
+                              <div>
+                                <p className="font-medium text-sm">
+                                  {this.formatTime(startTag.timestamp / 1000)} - {this.formatTime(endTag.timestamp / 1000)}
+                                </p>
+                                {startTag.zone && (
+                                  <Badge variant="outline" className="text-xs mt-1 capitalize">
+                                    {startTag.zone}
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50"
+                              onClick={async () => {
+                                try {
+                                  console.log('Deleting tags:', { startTagId: startTag.id, endTagId: endTag.id });
+                                  
+                                  // Find and remove matching segment first
+                                  const startTimeSeconds = startTag.timestamp / 1000;
+                                  const endTimeSeconds = endTag.timestamp / 1000;
+                                  
+                                  const matchingSegment = segments.find(seg => 
+                                    Math.abs(seg.start_time - startTimeSeconds) < 0.5 && 
+                                    Math.abs(seg.end_time - endTimeSeconds) < 0.5
+                                  );
+                                  
+                                  if (matchingSegment) {
+                                    console.log('Deleting matching segment:', matchingSegment.id);
+                                    await videoSegmentService.delete(matchingSegment.id);
+                                  }
+
+                                  // Remove from pending segments
+                                  this.handleRemovePendingSegment(startTag.id, endTag.id);
+
+                                  console.log('Deleting tags:', startTag.id, endTag.id);
+                                  await videoTagService.delete(startTag.id);
+                                  await videoTagService.delete(endTag.id);
+                                  
+                                  console.log('Reloading data');
+                                  await this.loadTags();
+                                  await this.loadSegments();
+                                  console.log('Delete complete');
+                                } catch (error) {
+                                  console.error('Error deleting tags:', error);
+                                }
+                              }}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                          {!isPending && (
+                            <Button
+                              size="sm"
+                              className="w-full bg-blue-600 hover:bg-blue-700"
+                              onClick={() => this.handleCreatePendingSegment(startTag, endTag)}
+                            >
+                              <Plus className="w-4 h-4 mr-2" />
+                              Add to Queue
+                            </Button>
+                          )}
+                          {isPending && (
+                            <div className="flex items-center gap-2 text-blue-700 text-xs">
+                              <CheckCircle2 className="w-4 h-4" />
+                              <span>Ready to confirm</span>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                    {hasPendingStart && (
+                      <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse"></div>
+                          <p className="text-sm text-amber-700 font-medium">Incomplete pair</p>
+                        </div>
+                        <p className="text-xs text-amber-600 mt-1">Start: {this.formatTime(lastStartTime / 1000)} - Click End to complete</p>
+                      </div>
+                    )}
+                    </>
+                  )}
+                </div>
+
+                {/* Pending Segments List */}
+                <div className="mt-4 pt-4 border-t">
+                  <p className="text-sm font-medium text-slate-700 mb-2">Queued Segments ({pendingSegments.length})</p>
+                  <div className="space-y-1 max-h-[120px] overflow-y-auto mb-3">
+                    {pendingSegments.length === 0 ? (
+                      <p className="text-xs text-slate-400 text-center py-2">No segments queued yet</p>
+                    ) : (
+                      pendingSegments.map((seg, idx) => (
+                        <div key={idx} className="flex items-center gap-2 text-xs bg-blue-50 p-2 rounded">
+                          <div className="w-3 h-3 bg-blue-600 rounded-full" />
+                          <span className="text-blue-700 font-medium">#{idx + 1}</span>
+                          <span className="text-slate-600">{this.formatTime(seg.start_time)} - {this.formatTime(seg.end_time)}</span>
+                          {seg.zone && <Badge variant="outline" className="text-xs capitalize">{seg.zone}</Badge>}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                  <Button
+                    className="w-full bg-emerald-600 hover:bg-emerald-700"
+                    onClick={() => {
+                      this.handleConfirmPlayerVideo();
+                      this.setState({ showTaggingDialog: false });
+                    }}
+                    disabled={pendingSegments.length === 0}
+                  >
+                    <CheckCircle2 className="w-4 h-4 mr-2" />
+                    Confirm All & Create Analyst Task ({pendingSegments.length})
+                  </Button>
+                </div>
               </div>
             </div>
           </DialogContent>
         </Dialog>
 
-        {showGallery && video?.sample_frames && (
-          <PlayerIdentificationGallery frames={video.sample_frames} playerName={video.player_name} onClose={() => this.setState({ showGallery: false })} />
-        )}
+        {/* Timeline Events */}
+        <Card className="border-0 shadow-sm">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Clock className="w-5 h-5 text-emerald-500" />
+              Timeline Events ({segments.length})
+            </CardTitle>
+            <p className="text-sm text-slate-500 mt-1">
+              Click on any segment to jump to that moment
+            </p>
+          </CardHeader>
+          <CardContent>
+            {segments.length === 0 ? (
+              <div className="text-center py-12">
+                <Clock className="w-12 h-12 mx-auto text-slate-300 mb-3" />
+                <p className="text-slate-500">No segments created yet</p>
+                <p className="text-sm text-slate-400 mt-1">
+                  Use the tagging dashboard to mark player involvement segments
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                {segments.map((segment, idx) => (
+                  <div
+                    key={segment.id}
+                    className="relative group cursor-pointer rounded-lg overflow-hidden border-2 border-emerald-500 bg-emerald-50 transition-all hover:scale-105 hover:shadow-lg"
+                    onClick={() => {
+                      if (this.videoRef.current) {
+                        this.videoRef.current.currentTime = segment.start_time + matchStartTime;
+                        this.videoRef.current.play();
+                        this.setState({ isPlaying: true, playUntilTime: segment.end_time });
+                      }
+                    }}
+                  >
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="absolute top-1 right-1 h-6 w-6 bg-red-500/90 hover:bg-red-600 text-white opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        try {
+                          const matchingStartTag = tags.find(t => 
+                            t.tag_type === 'involved_start' && 
+                            Math.abs(t.timestamp - segment.start_time) < 3
+                          );
+                          const matchingEndTag = tags.find(t => 
+                            t.tag_type === 'involved_end' && 
+                            Math.abs(t.timestamp - segment.end_time) < 3
+                          );
+
+                          if (matchingStartTag) {
+                            await videoTagService.delete(matchingStartTag.id).catch(() => {});
+                          }
+                          if (matchingEndTag) {
+                            await videoTagService.delete(matchingEndTag.id).catch(() => {});
+                          }
+
+                          await videoSegmentService.delete(segment.id).catch(() => {});
+                          
+                          await this.loadTags();
+                          await this.loadSegments();
+                        } catch (error) {}
+                      }}
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </Button>
+
+                    <div className="w-40 h-24 bg-gradient-to-br from-emerald-600 to-emerald-800 relative flex items-center justify-center">
+                      <div className="text-white text-center">
+                        <div className="text-2xl font-bold mb-1">{idx + 1}</div>
+                        <div className="text-xs opacity-90">Player Segment</div>
+                      </div>
+
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="absolute bottom-2 left-2 right-2">
+                          <p className="text-white text-xs font-medium">
+                            {this.formatTime(segment.start_time)} - {this.formatTime(segment.end_time)}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="absolute top-2 left-2 right-2 flex justify-between items-start">
+                      <div className="bg-black/70 text-white text-xs px-2 py-0.5 rounded font-mono">
+                        {this.formatTime(segment.start_time)}
+                      </div>
+                      <div className="bg-black/70 text-white text-xs px-2 py-0.5 rounded font-mono">
+                        {this.formatTime(segment.end_time)}
+                      </div>
+                    </div>
+
+                    {segment.zone && (
+                      <div className="absolute bottom-2 left-2">
+                        <Badge variant="outline" className="text-xs bg-white/90 capitalize">
+                          {segment.zone}
+                        </Badge>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
     );
   }
