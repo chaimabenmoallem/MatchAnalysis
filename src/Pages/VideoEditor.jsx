@@ -496,6 +496,7 @@ class VideoEditor extends Component {
                 font-family: system-ui, -apple-system, sans-serif; 
                 background: white;
                 padding: 20px;
+                color: #1e293b;
               }
               .zone-btn { 
                 padding: 8px 16px; 
@@ -504,12 +505,9 @@ class VideoEditor extends Component {
                 cursor: pointer; 
                 background: white;
                 font-size: 14px;
+                transition: all 0.2s;
               }
               .zone-btn.selected { background: #10b981; color: white; border-color: #10b981; }
-              .zone-defending { background: #ef4444; }
-              .zone-midfield { background: #f59e0b; }
-              .zone-attacking { background: #10b981; }
-              .zone-transition { background: #a855f7; }
               .tag-btn { 
                 padding: 10px 16px; 
                 border: 2px solid #e2e8f0; 
@@ -519,31 +517,36 @@ class VideoEditor extends Component {
                 font-size: 14px;
                 display: flex;
                 align-items: center;
+                justify-content: center;
                 gap: 8px;
+                transition: all 0.2s;
               }
-              .tag-btn:hover { background: #f8fafc; }
+              .tag-btn:hover:not(:disabled) { background: #f8fafc; }
               .tag-btn.success { border-color: #10b981; color: #10b981; }
               .tag-btn.danger { border-color: #ef4444; color: #ef4444; }
-              input, textarea { 
-                width: 100%; 
-                padding: 8px 12px; 
-                border: 1px solid #e2e8f0; 
-                border-radius: 6px; 
-                font-size: 14px;
+              .tag-btn:disabled { opacity: 0.5; cursor: not-allowed; border-color: #e2e8f0; color: #94a3b8; }
+              
+              .pending-start-banner {
+                background: #ecfdf5;
+                border: 1px solid #a7f3d0;
+                padding: 12px;
+                border-radius: 8px;
+                margin-bottom: 16px;
+                display: none;
               }
-              button.primary { 
-                background: #10b981; 
-                color: white; 
-                padding: 8px 16px; 
-                border: none; 
-                border-radius: 6px; 
-                cursor: pointer; 
-              }
-              .segment-item {
+              .pending-start-banner.active { display: block; }
+
+              .tag-pair-card {
                 padding: 12px;
                 background: #f8fafc;
+                border: 1px solid #e2e8f0;
                 border-radius: 8px;
                 margin-bottom: 8px;
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+              }
+              .tag-pair-row {
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
@@ -552,93 +555,122 @@ class VideoEditor extends Component {
                 background: transparent;
                 color: #ef4444;
                 border: none;
-                padding: 8px;
-                border-radius: 6px;
                 cursor: pointer;
-                min-width: 36px;
-                height: 36px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                font-size: 16px;
-                flex-shrink: 0;
-              }
-              .delete-btn:hover {
-                background: #fee2e2;
-                color: #dc2626;
-              }
-              .segment-number {
-                width: 32px;
-                height: 32px;
-                background: #d1fae5;
-                color: #059669;
-                border-radius: 50%;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                font-weight: 600;
-                font-size: 14px;
-              }
-              .zone-badge {
-                display: inline-block;
-                padding: 2px 8px;
-                font-size: 12px;
-                border: 1px solid #e5e7eb;
+                font-size: 18px;
+                padding: 4px;
                 border-radius: 4px;
-                margin-top: 4px;
-                background: white;
-                color: #6b7280;
-                text-transform: capitalize;
               }
+              .delete-btn:hover { background: #fee2e2; }
+              
+              .add-queue-btn {
+                width: 100%;
+                background: #2563eb;
+                color: white;
+                border: none;
+                padding: 8px;
+                border-radius: 4px;
+                cursor: pointer;
+                font-size: 13px;
+                font-weight: 500;
+              }
+              .add-queue-btn:hover { background: #1d4ed8; }
+              
+              .zone-badge {
+                padding: 2px 6px;
+                background: #f1f5f9;
+                border-radius: 4px;
+                font-size: 11px;
+                text-transform: capitalize;
+                border: 1px solid #e2e8f0;
+              }
+              .status-badge {
+                padding: 2px 6px;
+                background: #dcfce7;
+                color: #166534;
+                border-radius: 4px;
+                font-size: 11px;
+                font-weight: 500;
+              }
+              .primary-btn {
+                background: #10b981;
+                color: white;
+                padding: 12px;
+                border: none;
+                border-radius: 8px;
+                cursor: pointer;
+                font-size: 16px;
+                font-weight: 600;
+                width: 100%;
+                transition: background 0.2s;
+              }
+              .primary-btn:hover:not(:disabled) { background: #059669; }
+              .primary-btn:disabled { opacity: 0.5; cursor: not-allowed; }
             </style>
           </head>
           <body>
             <h2>Quick Tagging Dashboard</h2>
-            <p style="color: #64748b; margin-bottom: 20px;">Use this window for tagging while watching the video in the main window</p>
-            <div style="margin-bottom: 20px;">
-              <p style="font-weight: 600; margin-bottom: 8px;">Current Time: <span id="current-time">--:--</span></p>
-              <p style="color: #64748b; font-size: 14px;">Synced with video player</p>
+            <p style="color: #64748b; margin-bottom: 20px; font-size: 14px;">Use this window for tagging while watching the video in the main window</p>
+            
+            <div id="pending-banner" class="pending-start-banner">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span style="color: #065f46; font-weight: 600; display: flex; align-items: center; gap: 6px;">
+                  <span style="width: 8px; height: 8px; background: #10b981; border-radius: 50%; display: inline-block;"></span>
+                  Start Marked
+                </span>
+                <span id="pending-time" style="font-family: monospace; font-weight: 600;">00:00</span>
+              </div>
+              <p style="margin: 4px 0 0 0; font-size: 12px; color: #059669;">Click "End" to complete the segment</p>
             </div>
+
+            <div style="margin-bottom: 20px; background: #f1f5f9; padding: 12px; border-radius: 8px;">
+              <p style="font-weight: 600; margin: 0; color: #475569;">Current Time: <span id="current-time" style="font-family: monospace; font-size: 18px; color: #1e293b;">00:00</span></p>
+            </div>
+
             <div style="margin-bottom: 20px;">
-              <strong style="display: block; margin-bottom: 8px;">Field Zone</strong>
+              <strong style="display: block; margin-bottom: 8px; font-size: 14px; color: #64748b; text-transform: uppercase;">Field Zone</strong>
               <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;">
-                <button class="zone-btn" onclick="window.selectZone('defending')">Defending</button>
-                <button class="zone-btn" onclick="window.selectZone('midfield')">Midfield</button>
-                <button class="zone-btn" onclick="window.selectZone('attacking')">Attacking</button>
-                <button class="zone-btn" onclick="window.selectZone('transition')">Transition</button>
+                <button class="zone-btn" id="zone-defending" onclick="window.selectZone('defending')">Defending</button>
+                <button class="zone-btn" id="zone-midfield" onclick="window.selectZone('midfield')">Midfield</button>
+                <button class="zone-btn" id="zone-attacking" onclick="window.selectZone('attacking')">Attacking</button>
+                <button class="zone-btn" id="zone-transition" onclick="window.selectZone('transition')">Transition</button>
               </div>
-              <p id="selected-zone" style="margin-top: 8px; color: #64748b; font-size: 14px;">No zone selected</p>
             </div>
+
             <div style="margin-bottom: 20px;">
-              <strong style="display: block; margin-bottom: 8px;">Player Involvement</strong>
-              <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;">
-                <button class="tag-btn success" onclick="window.opener.handleTagFromPopup('involved_start')">▶ Start</button>
-                <button class="tag-btn danger" onclick="window.opener.handleTagFromPopup('involved_end')">⏸ End</button>
+              <strong style="display: block; margin-bottom: 8px; font-size: 14px; color: #64748b; text-transform: uppercase;">Player Involvement</strong>
+              <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;">
+                <button class="tag-btn success" id="start-btn" onclick="window.opener.handleTagFromPopup('involved_start')">▶ Start</button>
+                <button class="tag-btn danger" id="end-btn" onclick="window.opener.handleTagFromPopup('involved_end')" disabled>⏸ End</button>
               </div>
             </div>
+
             <div>
-              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
-                <strong>Tagged Pairs (<span id="segment-count">0</span>)</strong>
-                <span style="color: #10b981;">✂</span>
-              </div>
-              <div id="segments-list" style="max-height: 400px; overflow-y: auto;"></div>
+              <strong style="display: block; margin-bottom: 12px; font-size: 14px; color: #64748b; text-transform: uppercase;">Tagged Pairs (<span id="pair-count">0</span>)</strong>
+              <div id="pairs-list" style="max-height: 400px; overflow-y: auto;"></div>
             </div>
+
             <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #e2e8f0;">
-              <p style="font-size: 12px; color: #64748b; margin-bottom: 8px;">
-                <span id="segment-created-count">0</span> segments created
-              </p>
-              <button class="primary" style="width: 100%; padding: 12px; font-size: 16px;" onclick="window.opener.handleConfirmFromPopup()">
+              <button id="confirm-all-btn" class="primary-btn" onclick="window.opener.handleConfirmFromPopup()">
                 ✓ Confirm All & Create Analyst Task
               </button>
             </div>
+
             <script>
               let selectedZone = null;
+              
+              const formatTime = (seconds) => {
+                if (isNaN(seconds)) return "00:00";
+                const h = Math.floor(seconds / 3600);
+                const m = Math.floor((seconds % 3600) / 60);
+                const s = Math.floor(seconds % 60);
+                return (h > 0 ? h + ':' : '') + m.toString().padStart(2, '0') + ':' + s.toString().padStart(2, '0');
+              };
 
               window.selectZone = function(zone) {
                 selectedZone = zone;
                 document.querySelectorAll('.zone-btn').forEach(b => b.classList.remove('selected'));
-                event.target.classList.add('selected');
-                document.getElementById('selected-zone').textContent = 'Zone: ' + zone;
+                const btn = document.getElementById('zone-' + zone);
+                if (btn) btn.classList.add('selected');
                 if (window.opener && window.opener.setSelectedZoneFromPopup) {
                   window.opener.setSelectedZoneFromPopup(zone);
                 }
@@ -646,109 +678,171 @@ class VideoEditor extends Component {
 
               window.addEventListener('message', function(event) {
                 if (event.data.type === 'UPDATE_TIME') {
-                  const time = event.data.time;
-                  const m = Math.floor(time / 60);
-                  const s = Math.floor(time % 60);
-                  document.getElementById('current-time').textContent = 
-                    m.toString().padStart(2, '0') + ':' + s.toString().padStart(2, '0');
+                  document.getElementById('current-time').textContent = formatTime(event.data.time);
                 }
-                if (event.data.type === 'UPDATE_SEGMENTS') {
-                  const involvedStarts = event.data.involvedStarts || [];
-                  const involvedEnds = event.data.involvedEnds || [];
-                  const pairCount = Math.min(involvedStarts.length, involvedEnds.length);
-                  const segmentsCreated = event.data.segmentsCreated || 0;
-                  document.getElementById('segment-count').textContent = pairCount;
-                  document.getElementById('segment-created-count').textContent = segmentsCreated;
-                  const list = document.getElementById('segments-list');
-                  if (involvedStarts.length === 0 && involvedEnds.length === 0) {
-                    list.innerHTML = '<p style="color: #94a3b8; text-align: center; padding: 32px 0; font-size: 14px;">No tags yet.<br/>Mark player involvement start and end times.</p>';
+                
+                if (event.data.type === 'UPDATE_DATA') {
+                  const { involvedStarts, involvedEnds, pendingSegments, hasPendingStart, lastStartTime, currentZone, segments } = event.data;
+                  
+                  // Update Zone Selection
+                  if (currentZone && currentZone !== selectedZone) {
+                    selectedZone = currentZone;
+                    document.querySelectorAll('.zone-btn').forEach(b => b.classList.remove('selected'));
+                    const btn = document.getElementById('zone-' + currentZone);
+                    if (btn) btn.classList.add('selected');
+                  }
+
+                  // Update Banner
+                  const banner = document.getElementById('pending-banner');
+                  if (hasPendingStart) {
+                    banner.classList.add('active');
+                    document.getElementById('pending-time').textContent = formatTime(lastStartTime / 1000);
+                    document.getElementById('start-btn').disabled = true;
+                    document.getElementById('end-btn').disabled = false;
                   } else {
-                    const formatTime = (s) => {
-                      const m = Math.floor(s / 60);
-                      const sec = Math.floor(s % 60);
-                      return m.toString().padStart(2, '0') + ':' + sec.toString().padStart(2, '0');
-                    };
-                    let html = '';
-                    for (let idx = 0; idx < pairCount; idx++) {
-                      const start = involvedStarts[idx];
-                      const end = involvedEnds[idx];
-                      html += \`
-                        <div class="segment-item">
-                          <div style="display: flex; align-items: center; gap: 12px;">
-                            <div class="segment-number">\${idx + 1}</div>
-                            <div>
-                              <p style="font-weight: 600; font-size: 14px; margin: 0;">
-                                \${formatTime(start.timestamp)} - \${formatTime(end.timestamp)}
-                              </p>
+                    banner.classList.remove('active');
+                    document.getElementById('start-btn').disabled = false;
+                    document.getElementById('end-btn').disabled = true;
+                  }
+
+                  // Update List
+                  const list = document.getElementById('pairs-list');
+                  list.innerHTML = '';
+                  const count = Math.min(involvedStarts.length, involvedEnds.length);
+                  document.getElementById('pair-count').textContent = count;
+
+                  if (count === 0 && !hasPendingStart) {
+                    list.innerHTML = '<p style="color: #94a3b8; text-align: center; padding: 32px 0; font-size: 14px;">No tags yet.<br/>Mark player involvement start and end times.</p>';
+                  }
+
+                  for (let i = 0; i < count; i++) {
+                    const start = involvedStarts[i];
+                    const end = involvedEnds[i];
+                    
+                    const isQueued = pendingSegments.some(s => s.startTagId === start.id);
+                    const isSaved = segments.some(seg => 
+                      Math.abs(seg.start_time - start.timestamp / 1000) < 0.5 && 
+                      Math.abs(seg.end_time - end.timestamp / 1000) < 0.5
+                    );
+                    
+                    const card = document.createElement('div');
+                    card.className = 'tag-pair-card';
+                    card.innerHTML = \`
+                      <div class="tag-pair-row">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                          <div style="width: 24px; height: 24px; background: #e2e8f0; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600;">\${i+1}</div>
+                          <div>
+                            <div style="font-weight: 600; font-size: 14px;">\${formatTime(start.timestamp / 1000)} - \${formatTime(end.timestamp / 1000)}</div>
+                            <div style="display: flex; gap: 4px; margin-top: 2px;">
                               \${start.zone ? '<span class="zone-badge">' + start.zone + '</span>' : ''}
+                              \${isQueued ? '<span class="status-badge">Queued</span>' : ''}
+                              \${isSaved ? '<span class="status-badge" style="background:#e0f2fe; color:#0369a1;">Saved</span>' : ''}
                             </div>
                           </div>
-                          <button class="delete-btn" onclick="window.opener.deleteTagPairFromPopup('\${start.id}', '\${end.id}')">🗑️</button>
                         </div>
-                      \`;
-                    }
-                    if (involvedStarts.length > involvedEnds.length) {
-                      const lastStart = involvedStarts[involvedStarts.length - 1];
-                      html += \`
-                        <div class="segment-item" style="background: #fef3c7; border: 1px solid #fbbf24;">
-                          <div style="display: flex; align-items: center; gap: 12px;">
-                            <div class="segment-number" style="background: #fef3c7; color: #92400e; border: 2px solid #fbbf24;">\${pairCount + 1}</div>
-                            <div>
-                              <p style="font-weight: 600; font-size: 14px; margin: 0; color: #92400e;">
-                                \${formatTime(lastStart.timestamp)} - <span style="font-style: italic;">Waiting for End</span>
-                              </p>
-                              \${lastStart.zone ? '<span class="zone-badge" style="background: #fef3c7; color: #92400e; border-color: #fbbf24;">' + lastStart.zone + '</span>' : ''}
-                            </div>
-                          </div>
-                          <div style="width: 8px; height: 8px; background: #f59e0b; border-radius: 50%; animation: pulse 2s infinite;"></div>
-                        </div>
-                      \`;
-                    }
-                    list.innerHTML = html;
+                        <button class="delete-btn" title="Delete Pair" onclick="window.opener.deleteTagPairFromPopup('\${start.id}', '\${end.id}')">🗑</button>
+                      </div>
+                      \${(!isQueued && !isSaved) ? \`<button class="add-queue-btn" onclick="window.opener.handleCreatePendingSegmentFromPopup(\${i})">+ Add to Queue</button>\` : ''}
+                    \`;
+                    list.appendChild(card);
+                  }
+
+                  // Update Confirm Button
+                  const confirmBtn = document.getElementById('confirm-all-btn');
+                  if (pendingSegments.length > 0) {
+                    confirmBtn.style.display = 'block';
+                    confirmBtn.textContent = '✓ Confirm All & Create Analyst Task (' + pendingSegments.length + ')';
+                  } else {
+                    confirmBtn.style.display = 'none';
                   }
                 }
               });
             </script>
           </body>
         </html>
-      `);
+      \`);
       popupWindow.document.close();
 
-      const updatePopup = () => {
+      const syncPopup = () => {
         if (popupWindow && !popupWindow.closed) {
-          popupWindow.postMessage({ 
-            type: 'UPDATE_TIME', 
-            time: this.getMatchTime(this.state.currentTime) 
-          }, '*');
+          const matchTime = this.getMatchTime(this.state.currentTime);
+          popupWindow.postMessage({ type: 'UPDATE_TIME', time: matchTime }, '*');
           
-          const involvedStarts = this.state.tags.filter(t => t.tag_type === 'involved_start');
-          const involvedEnds = this.state.tags.filter(t => t.tag_type === 'involved_end');
-          popupWindow.postMessage({ 
-            type: 'UPDATE_SEGMENTS', 
-            involvedStarts: involvedStarts,
-            involvedEnds: involvedEnds,
-            segmentsCreated: this.state.segments.length
+          const tags = this.state.tags || [];
+          const involvedStarts = tags.filter(t => t.tag_type === 'involved_start');
+          const involvedEnds = tags.filter(t => t.tag_type === 'involved_end');
+          const hasPendingStart = involvedStarts.length > involvedEnds.length;
+          const lastStartTime = hasPendingStart ? involvedStarts[involvedStarts.length - 1]?.timestamp : null;
+
+          popupWindow.postMessage({
+            type: 'UPDATE_DATA',
+            involvedStarts,
+            involvedEnds,
+            pendingSegments: this.state.pendingSegments,
+            hasPendingStart,
+            lastStartTime,
+            currentZone: this.state.selectedZone,
+            segments: this.state.segments
           }, '*');
-          requestAnimationFrame(updatePopup);
+          requestAnimationFrame(syncPopup);
         }
       };
-      updatePopup();
+      syncPopup();
     }
   };
 
   updatePopupSegments = () => {
-    if (this.popupWindowRef.current && !this.popupWindowRef.current.closed) {
-      const involvedStarts = this.state.tags.filter(t => t.tag_type === 'involved_start');
-      const involvedEnds = this.state.tags.filter(t => t.tag_type === 'involved_end');
-      this.popupWindowRef.current.postMessage({ 
-        type: 'UPDATE_SEGMENTS', 
-        involvedStarts: involvedStarts,
-        involvedEnds: involvedEnds
-      }, '*');
-    }
+    // Handled by sync loop in handlePopOutDashboard
   };
 
-  render() {
+  setupPopupHandlers = () => {
+    window.handleTagFromPopup = (tagType) => {
+      this.handleAddTag(tagType);
+    };
+
+    window.setSelectedZoneFromPopup = (zone) => {
+      this.setState({ selectedZone: zone });
+    };
+
+    window.handleCreatePendingSegmentFromPopup = (idx) => {
+      const tags = this.state.tags || [];
+      const starts = tags.filter(t => t.tag_type === 'involved_start');
+      const ends = tags.filter(t => t.tag_type === 'involved_end');
+      if (starts[idx] && ends[idx]) {
+        this.handleCreatePendingSegment(starts[idx], ends[idx]);
+      }
+    };
+
+    window.deleteTagPairFromPopup = async (startId, endId) => {
+      try {
+        const startTag = this.state.tags.find(t => t.id == startId);
+        const endTag = this.state.tags.find(t => t.id == endId);
+        
+        if (startTag && endTag) {
+          const startTimeSeconds = startTag.timestamp / 1000;
+          const endTimeSeconds = endTag.timestamp / 1000;
+          
+          const matchingSegment = this.state.segments.find(seg => 
+            Math.abs(seg.start_time - startTimeSeconds) < 0.5 && 
+            Math.abs(seg.end_time - endTimeSeconds) < 0.5
+          );
+          
+          if (matchingSegment) {
+            await videoSegmentService.delete(matchingSegment.id);
+          }
+        }
+
+        this.handleRemovePendingSegment(startId, endId);
+        await videoTagService.delete(startId);
+        await videoTagService.delete(endId);
+        
+        await this.loadTags();
+        await this.loadSegments();
+      } catch (error) {
+        console.error('Delete error:', error);
+      }
+    };
+  };  render() {
     const { taskId, navigate } = this.props;
     const {
       allTasks,
