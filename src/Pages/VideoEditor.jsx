@@ -169,99 +169,370 @@ class VideoEditor extends Component {
     this.setState({ pendingSegments: [] });
     await this.loadSegments();
   };
-
   handlePopOutDashboard = () => {
-    const popupWindow = window.open('', 'TaggingDashboard', 'width=800,height=900');
+    this.setState({ isPopupOpen: true, showTaggingDialog: false });
+    
+    const popupWindow = window.open('', 'TaggingDashboard', 'width=800,height=900,left=100,top=100');
     this.popupWindowRef.current = popupWindow;
+    
     if (popupWindow) {
       popupWindow.document.write(`
-        <!DOCTYPE html><html><head><title>Quick Tagging Dashboard</title>
-        <style>
-          body { margin: 0; font-family: sans-serif; padding: 20px; color: #1e293b; }
-          .zone-btn { padding: 8px 16px; border: 1px solid #e2e8f0; border-radius: 6px; cursor: pointer; background: white; margin-right: 5px; }
-          .zone-btn.selected { background: #10b981; color: white; border-color: #10b981; }
-          .tag-btn { padding: 10px 16px; border: 2px solid #e2e8f0; border-radius: 8px; cursor: pointer; background: white; width: 48%; }
-          .tag-btn.success { border-color: #10b981; color: #10b981; }
-          .tag-btn.danger { border-color: #ef4444; color: #ef4444; }
-          .tag-btn:disabled { opacity: 0.5; }
-          .card { padding: 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
-          .primary-btn { background: #10b981; color: white; padding: 12px; border: none; border-radius: 8px; cursor: pointer; width: 100%; font-weight: 600; margin-top: 20px; }
-        </style></head>
-        <body>
-          <h2>Quick Tagging Dashboard</h2>
-          <div style="background: #f1f5f9; padding: 10px; border-radius: 8px; margin-bottom: 20px;">
-            Current Time: <span id="current-time" style="font-family: monospace; font-size: 18px;">00:00</span>
-          </div>
-          <div id="pending-banner" style="display:none; background:#ecfdf5; padding:10px; border-radius:8px; margin-bottom:10px;">
-            Start Marked at <span id="pending-time">00:00</span>
-          </div>
-          <div style="margin-bottom: 20px;">
-            <strong>Zones:</strong><br/>
-            <button class="zone-btn" id="zone-defending" onclick="window.selectZone('defending')">Defending</button>
-            <button class="zone-btn" id="zone-midfield" onclick="window.selectZone('midfield')">Midfield</button>
-            <button class="zone-btn" id="zone-attacking" onclick="window.selectZone('attacking')">Attacking</button>
-            <button class="zone-btn" id="zone-transition" onclick="window.selectZone('transition')">Transition</button>
-          </div>
-          <div style="margin-bottom: 20px; display:flex; justify-content:space-between;">
-            <button class="tag-btn success" id="start-btn" onclick="window.opener.handleTagFromPopup('involved_start')">▶ Start</button>
-            <button class="tag-btn danger" id="end-btn" onclick="window.opener.handleTagFromPopup('involved_end')" disabled>⏸ End</button>
-          </div>
-          <strong>Pairs:</strong><div id="list"></div>
-          <button id="confirm-btn" class="primary-btn" style="display:none;" onclick="window.opener.handleConfirmFromPopup()">Confirm All</button>
-          <script>
-            let selZone = null;
-            const fmt = (s) => { if(isNaN(s)) return "00:00"; const m=Math.floor(s/60), sec=Math.floor(s%60); return m.toString().padStart(2,'0')+':'+sec.toString().padStart(2,'0'); };
-            window.selectZone = (z) => { selZone=z; document.querySelectorAll('.zone-btn').forEach(b=>b.classList.remove('selected')); document.getElementById('zone-'+z).classList.add('selected'); window.opener.setSelectedZoneFromPopup(z); };
-            window.addEventListener('message', (e) => {
-              if(e.data.type==='UPDATE_TIME') document.getElementById('current-time').textContent = fmt(e.data.time);
-              if(e.data.type==='UPDATE_DATA') {
-                const { involvedStarts, involvedEnds, pendingSegments, hasPendingStart, lastStartTime, currentZone, segments } = e.data;
-                const banner = document.getElementById('pending-banner');
-                if(hasPendingStart) { banner.style.display='block'; document.getElementById('pending-time').textContent=fmt(lastStartTime/1000); document.getElementById('start-btn').disabled=true; document.getElementById('end-btn').disabled=false; }
-                else { banner.style.display='none'; document.getElementById('start-btn').disabled=false; document.getElementById('end-btn').disabled=true; }
-                const list = document.getElementById('list'); list.innerHTML = '';
-                const count = Math.min(involvedStarts.length, involvedEnds.length);
-                for(let i=0; i<count; i++) {
-                  const s=involvedStarts[i], en=involvedEnds[i];
-                  const q = pendingSegments.some(ps=>ps.startTagId===s.id), sv = segments.some(seg=>Math.abs(seg.start_time-s.timestamp/1000)<0.5);
-                  const div = document.createElement('div'); div.className='card';
-                  div.innerHTML = \`<div>\${fmt(s.timestamp/1000)} - \${fmt(en.timestamp/1000)} [\${s.zone||''}] \${q?'(Queued)':''} \${sv?'(Saved)':''}</div>
-                    <div><button onclick="window.opener.deleteTagPairFromPopup('\${s.id}','\${en.id}')">🗑</button>
-                    \${(!q && !sv)?\`<button onclick="window.opener.handleCreatePendingSegmentFromPopup(\${i})">+ Queue</button>\`:''}</div>\`;
-                  list.appendChild(div);
-                }
-                document.getElementById('confirm-btn').style.display = pendingSegments.length > 0 ? 'block' : 'none';
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Quick Tagging Dashboard</title>
+            <style>
+              body { 
+                margin: 0; 
+                font-family: system-ui, -apple-system, sans-serif; 
+                background: white;
+                padding: 20px;
+                color: #1e293b;
               }
-            });
-          </script>
-        </body></html>
-      `);
+              .zone-btn { 
+                padding: 8px 16px; 
+                border: 1px solid #e2e8f0; 
+                border-radius: 6px; 
+                cursor: pointer; 
+                background: white;
+                font-size: 14px;
+                transition: all 0.2s;
+              }
+              .zone-btn.selected { background: #10b981; color: white; border-color: #10b981; }
+              .tag-btn { 
+                padding: 10px 16px; 
+                border: 2px solid #e2e8f0; 
+                border-radius: 8px; 
+                cursor: pointer; 
+                background: white;
+                font-size: 14px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 8px;
+                transition: all 0.2s;
+              }
+              .tag-btn:hover:not(:disabled) { background: #f8fafc; }
+              .tag-btn.success { border-color: #10b981; color: #10b981; }
+              .tag-btn.danger { border-color: #ef4444; color: #ef4444; }
+              .tag-btn:disabled { opacity: 0.5; cursor: not-allowed; border-color: #e2e8f0; color: #94a3b8; }
+              
+              .pending-start-banner {
+                background: #ecfdf5;
+                border: 1px solid #a7f3d0;
+                padding: 12px;
+                border-radius: 8px;
+                margin-bottom: 16px;
+                display: none;
+              }
+              .pending-start-banner.active { display: block; }
+
+              .tag-pair-card {
+                padding: 12px;
+                background: #f8fafc;
+                border: 1px solid #e2e8f0;
+                border-radius: 8px;
+                margin-bottom: 8px;
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+              }
+              .tag-pair-row {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+              }
+              .delete-btn {
+                background: transparent;
+                color: #ef4444;
+                border: none;
+                cursor: pointer;
+                font-size: 18px;
+                padding: 4px;
+                border-radius: 4px;
+              }
+              .delete-btn:hover { background: #fee2e2; }
+              
+              .add-queue-btn {
+                width: 100%;
+                background: #2563eb;
+                color: white;
+                border: none;
+                padding: 8px;
+                border-radius: 4px;
+                cursor: pointer;
+                font-size: 13px;
+                font-weight: 500;
+              }
+              .add-queue-btn:hover { background: #1d4ed8; }
+              
+              .zone-badge {
+                padding: 2px 6px;
+                background: #f1f5f9;
+                border-radius: 4px;
+                font-size: 11px;
+                text-transform: capitalize;
+                border: 1px solid #e2e8f0;
+              }
+              .status-badge {
+                padding: 2px 6px;
+                background: #dcfce7;
+                color: #166534;
+                border-radius: 4px;
+                font-size: 11px;
+                font-weight: 500;
+              }
+              .primary-btn {
+                background: #10b981;
+                color: white;
+                padding: 12px;
+                border: none;
+                border-radius: 8px;
+                cursor: pointer;
+                font-size: 16px;
+                font-weight: 600;
+                width: 100%;
+                transition: background 0.2s;
+              }
+              .primary-btn:hover:not(:disabled) { background: #059669; }
+              .primary-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+            </style>
+          </head>
+          <body>
+            <h2>Quick Tagging Dashboard</h2>
+            <p style="color: #64748b; margin-bottom: 20px; font-size: 14px;">Use this window for tagging while watching the video in the main window</p>
+            
+            <div id="pending-banner" class="pending-start-banner">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span style="color: #065f46; font-weight: 600; display: flex; align-items: center; gap: 6px;">
+                  <span style="width: 8px; height: 8px; background: #10b981; border-radius: 50%; display: inline-block;"></span>
+                  Start Marked
+                </span>
+                <span id="pending-time" style="font-family: monospace; font-weight: 600;">00:00</span>
+              </div>
+              <p style="margin: 4px 0 0 0; font-size: 12px; color: #059669;">Click "End" to complete the segment</p>
+            </div>
+
+            <div style="margin-bottom: 20px; background: #f1f5f9; padding: 12px; border-radius: 8px;">
+              <p style="font-weight: 600; margin: 0; color: #475569;">Current Time: <span id="current-time" style="font-family: monospace; font-size: 18px; color: #1e293b;">00:00</span></p>
+            </div>
+
+            <div style="margin-bottom: 20px;">
+              <strong style="display: block; margin-bottom: 8px; font-size: 14px; color: #64748b; text-transform: uppercase;">Field Zone</strong>
+              <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;">
+                <button class="zone-btn" id="zone-defending" onclick="window.selectZone('defending')">Defending</button>
+                <button class="zone-btn" id="zone-midfield" onclick="window.selectZone('midfield')">Midfield</button>
+                <button class="zone-btn" id="zone-attacking" onclick="window.selectZone('attacking')">Attacking</button>
+                <button class="zone-btn" id="zone-transition" onclick="window.selectZone('transition')">Transition</button>
+              </div>
+            </div>
+
+            <div style="margin-bottom: 20px;">
+              <strong style="display: block; margin-bottom: 8px; font-size: 14px; color: #64748b; text-transform: uppercase;">Player Involvement</strong>
+              <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;">
+                <button class="tag-btn success" id="start-btn" onclick="window.opener.handleTagFromPopup('involved_start')">▶ Start</button>
+                <button class="tag-btn danger" id="end-btn" onclick="window.opener.handleTagFromPopup('involved_end')" disabled>⏸ End</button>
+              </div>
+            </div>
+
+            <div>
+              <strong style="display: block; margin-bottom: 12px; font-size: 14px; color: #64748b; text-transform: uppercase;">Tagged Pairs (<span id="pair-count">0</span>)</strong>
+              <div id="pairs-list" style="max-height: 400px; overflow-y: auto;"></div>
+            </div>
+
+            <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #e2e8f0;">
+              <button id="confirm-all-btn" class="primary-btn" onclick="window.opener.handleConfirmFromPopup()">
+                ✓ Confirm All & Create Analyst Task
+              </button>
+            </div>
+
+            <script>
+              let selectedZone = null;
+              
+              const formatTime = (seconds) => {
+                if (isNaN(seconds)) return "00:00";
+                const h = Math.floor(seconds / 3600);
+                const m = Math.floor((seconds % 3600) / 60);
+                const s = Math.floor(seconds % 60);
+                return (h > 0 ? h + ':' : '') + m.toString().padStart(2, '0') + ':' + s.toString().padStart(2, '0');
+              };
+
+              window.selectZone = function(zone) {
+                selectedZone = zone;
+                document.querySelectorAll('.zone-btn').forEach(b => b.classList.remove('selected'));
+                const btn = document.getElementById('zone-' + zone);
+                if (btn) btn.classList.add('selected');
+                if (window.opener && window.opener.setSelectedZoneFromPopup) {
+                  window.opener.setSelectedZoneFromPopup(zone);
+                }
+              };
+
+              window.addEventListener('message', function(event) {
+                if (event.data.type === 'UPDATE_TIME') {
+                  document.getElementById('current-time').textContent = formatTime(event.data.time);
+                }
+                
+                if (event.data.type === 'UPDATE_DATA') {
+                  const { involvedStarts, involvedEnds, pendingSegments, hasPendingStart, lastStartTime, currentZone, segments } = event.data;
+                  
+                  // Update Zone Selection
+                  if (currentZone && currentZone !== selectedZone) {
+                    selectedZone = currentZone;
+                    document.querySelectorAll('.zone-btn').forEach(b => b.classList.remove('selected'));
+                    const btn = document.getElementById('zone-' + currentZone);
+                    if (btn) btn.classList.add('selected');
+                  }
+
+                  // Update Banner
+                  const banner = document.getElementById('pending-banner');
+                  if (hasPendingStart) {
+                    banner.classList.add('active');
+                    document.getElementById('pending-time').textContent = formatTime(lastStartTime / 1000);
+                    document.getElementById('start-btn').disabled = true;
+                    document.getElementById('end-btn').disabled = false;
+                  } else {
+                    banner.classList.remove('active');
+                    document.getElementById('start-btn').disabled = false;
+                    document.getElementById('end-btn').disabled = true;
+                  }
+
+                  // Update List
+                  const list = document.getElementById('pairs-list');
+                  list.innerHTML = '';
+                  const count = Math.min(involvedStarts.length, involvedEnds.length);
+                  document.getElementById('pair-count').textContent = count;
+
+                  if (count === 0 && !hasPendingStart) {
+                    list.innerHTML = '<p style="color: #94a3b8; text-align: center; padding: 32px 0; font-size: 14px;">No tags yet.<br/>Mark player involvement start and end times.</p>';
+                  }
+
+                  for (let i = 0; i < count; i++) {
+                    const start = involvedStarts[i];
+                    const end = involvedEnds[i];
+                    
+                    const isQueued = pendingSegments.some(s => s.startTagId === start.id);
+                    const isSaved = segments.some(seg => 
+                      Math.abs(seg.start_time - start.timestamp / 1000) < 0.5 && 
+                      Math.abs(seg.end_time - end.timestamp / 1000) < 0.5
+                    );
+                    
+                    const card = document.createElement('div');
+                    card.className = 'tag-pair-card';
+                    card.innerHTML = \`
+                      <div class="tag-pair-row">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                          <div style="width: 24px; height: 24px; background: #e2e8f0; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600;">\${i+1}</div>
+                          <div>
+                            <div style="font-weight: 600; font-size: 14px;">\${formatTime(start.timestamp / 1000)} - \${formatTime(end.timestamp / 1000)}</div>
+                            <div style="display: flex; gap: 4px; margin-top: 2px;">
+                              \${start.zone ? '<span class="zone-badge">' + start.zone + '</span>' : ''}
+                              \${isQueued ? '<span class="status-badge">Queued</span>' : ''}
+                              \${isSaved ? '<span class="status-badge" style="background:#e0f2fe; color:#0369a1;">Saved</span>' : ''}
+                            </div>
+                          </div>
+                        </div>
+                        <button class="delete-btn" title="Delete Pair" onclick="window.opener.deleteTagPairFromPopup('\${start.id}', '\${end.id}')">🗑</button>
+                      </div>
+                      \${(!isQueued && !isSaved) ? \`<button class="add-queue-btn" onclick="window.opener.handleCreatePendingSegmentFromPopup(\${i})">+ Add to Queue</button>\` : ''}
+                    \`;
+                    list.appendChild(card);
+                  }
+
+                  // Update Confirm Button
+                  const confirmBtn = document.getElementById('confirm-all-btn');
+                  if (pendingSegments.length > 0) {
+                    confirmBtn.style.display = 'block';
+                    confirmBtn.textContent = '✓ Confirm All & Create Analyst Task (' + pendingSegments.length + ')';
+                  } else {
+                    confirmBtn.style.display = 'none';
+                  }
+                }
+              });
+            </script>
+          </body>
+        </html>
+      \`);
       popupWindow.document.close();
-      const sync = () => {
+
+      const syncPopup = () => {
         if (popupWindow && !popupWindow.closed) {
-          const mt = this.getMatchTime(this.state.currentTime);
-          const starts = this.state.tags.filter(t=>t.tag_type==='involved_start'), ends = this.state.tags.filter(t=>t.tag_type==='involved_end');
-          popupWindow.postMessage({ type:'UPDATE_TIME', time:mt }, '*');
-          popupWindow.postMessage({ type:'UPDATE_DATA', involvedStarts:starts, involvedEnds:ends, pendingSegments:this.state.pendingSegments, hasPendingStart:starts.length>ends.length, lastStartTime:starts.length>ends.length?starts[starts.length-1].timestamp:null, currentZone:this.state.selectedZone, segments:this.state.segments }, '*');
-          requestAnimationFrame(sync);
+          const matchTime = this.getMatchTime(this.state.currentTime);
+          popupWindow.postMessage({ type: 'UPDATE_TIME', time: matchTime }, '*');
+          
+          const tags = this.state.tags || [];
+          const involvedStarts = tags.filter(t => t.tag_type === 'involved_start');
+          const involvedEnds = tags.filter(t => t.tag_type === 'involved_end');
+          const hasPendingStart = involvedStarts.length > involvedEnds.length;
+          const lastStartTime = hasPendingStart ? involvedStarts[involvedStarts.length - 1]?.timestamp : null;
+
+          popupWindow.postMessage({
+            type: 'UPDATE_DATA',
+            involvedStarts,
+            involvedEnds,
+            pendingSegments: this.state.pendingSegments,
+            hasPendingStart,
+            lastStartTime,
+            currentZone: this.state.selectedZone,
+            segments: this.state.segments
+          }, '*');
+          requestAnimationFrame(syncPopup);
         }
       };
-      sync();
+      syncPopup();
     }
   };
 
   updatePopupSegments = () => {};
+
   setupPopupHandlers = () => {
-    window.handleTagFromPopup = (t) => this.handleAddTag(t);
-    window.setSelectedZoneFromPopup = (z) => this.setState({ selectedZone:z });
-    window.handleCreatePendingSegmentFromPopup = (i) => { const s=this.state.tags.filter(t=>t.tag_type==='involved_start'), e=this.state.tags.filter(t=>t.tag_type==='involved_end'); if(s[i]&&e[i]) this.handleCreatePendingSegment(s[i],e[i]); };
-    window.deleteTagPairFromPopup = async (sid, eid) => {
-      const s=this.state.tags.find(t=>t.id==sid), en=this.state.tags.find(t=>t.id==eid);
-      if(s&&en) { const ms=this.state.segments.find(seg=>Math.abs(seg.start_time-s.timestamp/1000)<0.5); if(ms) await videoSegmentService.delete(ms.id); }
-      this.handleRemovePendingSegment(sid,eid); await videoTagService.delete(sid); await videoTagService.delete(eid);
-      await this.loadTags(); await this.loadSegments();
+    window.handleTagFromPopup = (tagType) => {
+      this.handleAddTag(tagType);
+    };
+
+    window.setSelectedZoneFromPopup = (zone) => {
+      this.setState({ selectedZone: zone });
+    };
+
+    window.handleCreatePendingSegmentFromPopup = (idx) => {
+      const tags = this.state.tags || [];
+      const starts = tags.filter(t => t.tag_type === 'involved_start');
+      const ends = tags.filter(t => t.tag_type === 'involved_end');
+      if (starts[idx] && ends[idx]) {
+        this.handleCreatePendingSegment(starts[idx], ends[idx]);
+      }
+    };
+
+    window.deleteTagPairFromPopup = async (startId, endId) => {
+      try {
+        const startTag = this.state.tags.find(t => t.id == startId);
+        const endTag = this.state.tags.find(t => t.id == endId);
+        
+        if (startTag && endTag) {
+          const startTimeSeconds = startTag.timestamp / 1000;
+          const endTimeSeconds = endTag.timestamp / 1000;
+          
+          const matchingSegment = this.state.segments.find(seg => 
+            Math.abs(seg.start_time - startTimeSeconds) < 0.5 && 
+            Math.abs(seg.end_time - endTimeSeconds) < 0.5
+          );
+          
+          if (matchingSegment) {
+            await videoSegmentService.delete(matchingSegment.id);
+          }
+        }
+
+        this.handleRemovePendingSegment(startId, endId);
+        await videoTagService.delete(startId);
+        await videoTagService.delete(endId);
+        
+        await this.loadTags();
+        await this.loadSegments();
+      } catch (error) {
+        console.error('Delete error:', error);
+      }
     };
     window.handleConfirmFromPopup = () => this.handleConfirmPlayerVideo();
+  };
   };
 
   cleanupPopupHandlers = () => { delete window.handleTagFromPopup; delete window.setSelectedZoneFromPopup; delete window.deleteTagPairFromPopup; delete window.handleConfirmFromPopup; };
