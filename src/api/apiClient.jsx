@@ -62,21 +62,59 @@ export const videoTaskService = {
 };
 
 export const videoTagService = {
-  list: async () => [],
-  filter: async () => [],
-  get: async () => null,
-  create: async (data) => data,
-  update: async (id, data) => data,
-  delete: async () => {}
+  async list() {
+    const response = await fetch(`${API_BASE_URL}/tags`);
+    return await response.json();
+  },
+  async filter(filterData) {
+    const params = new URLSearchParams();
+    if (filterData?.video_id) params.append('video_id', filterData.video_id);
+    const response = await fetch(`${API_BASE_URL}/tags?${params.toString()}`);
+    return await response.json();
+  },
+  async create(data) {
+    const response = await fetch(`${API_BASE_URL}/tags`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    return await response.json();
+  },
+  async delete(id) {
+    await fetch(`${API_BASE_URL}/tags/${id}`, { method: 'DELETE' });
+  }
 };
 
 export const videoSegmentService = {
-  list: async () => [],
-  filter: async () => [],
-  get: async () => null,
-  create: async (data) => data,
-  update: async (id, data) => data,
-  delete: async () => {}
+  async list() {
+    const response = await fetch(`${API_BASE_URL}/segments`);
+    return await response.json();
+  },
+  async filter(filterData) {
+    const params = new URLSearchParams();
+    if (filterData?.video_id) params.append('video_id', filterData.video_id);
+    const response = await fetch(`${API_BASE_URL}/segments?${params.toString()}`);
+    return await response.json();
+  },
+  async create(data) {
+    const response = await fetch(`${API_BASE_URL}/segments`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    return await response.json();
+  },
+  async update(id, data) {
+    const response = await fetch(`${API_BASE_URL}/segments/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    return await response.json();
+  },
+  async delete(id) {
+    await fetch(`${API_BASE_URL}/segments/${id}`, { method: 'DELETE' });
+  }
 };
 
 export const actionAnnotationService = {

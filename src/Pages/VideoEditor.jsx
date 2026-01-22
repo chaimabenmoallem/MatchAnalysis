@@ -378,32 +378,30 @@ class VideoEditor extends Component {
   };
 
   handleAddTag = async (tagType) => {
-    const { currentTime, selectedZone, task } = this.state;
+    const { currentTime, selectedZone, task, matchStartTime } = this.state;
     const taskId = this.props.taskId || task?.id;
-    if (!taskId || !this.state.video?.id) return;
+    if (!taskId || !this.state.video?.id) {
+      console.warn('Missing taskId or videoId:', { taskId, videoId: this.state.video?.id });
+      return;
+    }
     
     try {
       const matchTime = this.getMatchTime(currentTime);
       const timestampMs = Math.round(matchTime * 1000); // Convert to milliseconds as integer
-      console.log('Creating tag with:', {
-        video_id: this.state.video.id,
-        timestamp: timestampMs,
-        tag_type: tagType,
-        tag_name: tagType,
-        description: `Tag at ${matchTime.toFixed(2)}s`
-      });
+      
+      console.log('Creating tag:', { tagType, matchTime, timestampMs, selectedZone });
       
       await videoTagService.create({
         video_id: this.state.video.id,
         timestamp: timestampMs,
         tag_type: tagType,
         tag_name: tagType,
+        zone: selectedZone,
         description: `Tag at ${matchTime.toFixed(2)}s`
       });
       await this.loadTags();
     } catch (error) {
       console.error('Error creating tag:', error);
-      alert('Failed to create tag: ' + (error.message || 'Unknown error'));
     }
   };
 

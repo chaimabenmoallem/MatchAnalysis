@@ -45,8 +45,121 @@ class ActionAnnotation(db.Model):
     action_category = db.Column(db.String(100))
     note = db.Column(db.Text)
 
+class VideoTag(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    video_id = db.Column(db.String(255), db.ForeignKey('video.id'))
+    timestamp = db.Column(db.Integer)
+    tag_type = db.Column(db.String(50))
+    tag_name = db.Column(db.String(100))
+    zone = db.Column(db.String(50))
+    description = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+class VideoSegment(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    video_id = db.Column(db.String(255), db.ForeignKey('video.id'))
+    start_time = db.Column(db.Integer)
+    end_time = db.Column(db.Integer)
+    segment_type = db.Column(db.String(100))
+    description = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
 # Routes
-@app.route('/api/upload', methods=['POST'])
+@app.route('/api/tags', methods=['GET'])
+def get_tags():
+    video_id = request.args.get('video_id')
+    query = VideoTag.query
+    if video_id:
+        query = query.filter_by(video_id=video_id)
+    tags = query.all()
+    return jsonify([{
+        'id': t.id,
+        'video_id': t.video_id,
+        'timestamp': t.timestamp,
+        'tag_type': t.tag_type,
+        'tag_name': t.tag_name,
+        'zone': t.zone,
+        'description': t.description
+    } for t in tags])
+
+@app.route('/api/tags', methods=['POST'])
+def create_tag():
+    try:
+        data = request.json
+        tag = VideoTag(
+            video_id=data.get('video_id'),
+            timestamp=data.get('timestamp'),
+            tag_type=data.get('tag_type'),
+            tag_name=data.get('tag_name'),
+            zone=data.get('zone'),
+            description=data.get('description')
+        )
+        db.session.add(tag)
+        db.session.commit()
+        return jsonify({'id': tag.id}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/tags/<int:tag_id>', methods=['DELETE'])
+def delete_tag(tag_id):
+    tag = VideoTag.query.get(tag_id)
+    if tag:
+        db.session.delete(tag)
+        db.session.commit()
+    return '', 204
+
+@app.route('/api/segments', methods=['GET'])
+def get_segments():
+    video_id = request.args.get('video_id')
+    query = VideoSegment.query
+    if video_id:
+        query = query.filter_by(video_id=video_id)
+    segments = query.all()
+    return jsonify([{
+        'id': s.id,
+        'video_id': s.video_id,
+        'start_time': s.start_time,
+        'end_time': s.end_time,
+        'segment_type': s.segment_type,
+        'description': s.description
+    } for s in segments])
+
+@app.route('/api/segments', methods=['POST'])
+def create_segment():
+    try:
+        data = request.json
+        segment = VideoSegment(
+            video_id=data.get('video_id'),
+            start_time=data.get('start_time'),
+            end_time=data.get('end_time'),
+            segment_type=data.get('segment_type'),
+            description=data.get('description')
+        )
+        db.session.add(segment)
+        db.session.commit()
+        return jsonify({'id': segment.id}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/segments/<int:segment_id>', methods=['DELETE', 'PUT'])
+def handle_segment(segment_id):
+    segment = VideoSegment.query.get(segment_id)
+    if not segment:
+        return jsonify({'error': 'Segment not found'}), 404
+        
+    if request.method == 'DELETE':
+        db.session.delete(segment)
+        db.session.commit()
+        return '', 204
+    else:
+        data = request.json
+        if 'start_time' in data: segment.start_time = data['start_time']
+        if 'end_time' in data: segment.end_time = data['end_time']
+        if 'segment_type' in data: segment.segment_type = data['segment_type']
+        db.session.commit()
+        return jsonify({'id': segment.id})
 def upload_file():
     if 'file' not in request.files:
         return jsonify({'error': 'No file part'}), 400
