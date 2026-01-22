@@ -1,9 +1,9 @@
+from flask import Flask, request, jsonify, send_from_directory
 import os
 import cv2
 import base64
 import requests
 import tempfile
-from flask import Flask, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from datetime import datetime
@@ -16,6 +16,12 @@ app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
+
+# Serve uploaded videos
+@app.route('/videos/<path:filename>')
+def serve_video(filename):
+    video_dir = os.path.join(os.getcwd(), 'videos')
+    return send_from_directory(video_dir, filename)
 
 # Models
 class Video(db.Model):

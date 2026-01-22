@@ -1062,7 +1062,7 @@ class VideoEditor extends Component {
           <div className="bg-black relative">
             <video
               ref={this.videoRef}
-              src={video?.file_url}
+              src={video?.url ? (video.url.startsWith('http') ? video.url : `/${video.url}`) : video?.file_url}
               className="w-full h-[400px] lg:h-[500px] object-contain"
               onTimeUpdate={() => {
                 const currentTime = this.videoRef.current?.currentTime || 0;
@@ -1073,9 +1073,14 @@ class VideoEditor extends Component {
                   this.setState({ isPlaying: false, playUntilTime: null });
                 }
               }}
-              onLoadedMetadata={() => this.setState({ duration: this.videoRef.current?.duration || 0 })}
+              onLoadedMetadata={() => {
+                const duration = this.videoRef.current?.duration || 0;
+                this.setState({ duration });
+                console.log("Video loaded, duration:", duration);
+              }}
               onPlay={() => this.setState({ isPlaying: true })}
               onPause={() => this.setState({ isPlaying: false })}
+              onError={(e) => console.error("Video player error:", e)}
             />
 
             {/* Time Overlay */}
