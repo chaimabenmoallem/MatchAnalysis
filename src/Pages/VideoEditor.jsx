@@ -21,7 +21,8 @@ import {
   User,
   CheckCircle2,
   ExternalLink,
-  Scissors
+  Scissors,
+  Trash2
 } from 'lucide-react';
 import { Skeleton } from "../Components/ui/skeleton";
 import EnhancedTimeline from '../Components/video/EnhancedTimeline';
