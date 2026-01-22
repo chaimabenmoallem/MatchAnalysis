@@ -289,7 +289,7 @@ class VideoEditor extends Component {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filtered.map(t => (
-              <Card key={t.id} className="cursor-pointer hover:shadow-md" onClick={() => navigate(createPageUrl('VideoEditor') + `?taskId=\${t.id}`)}>
+              <Card key={t.id} className="cursor-pointer hover:shadow-md" onClick={() => navigate(createPageUrl('VideoEditor') + `?taskId=${t.id}`)}>
                 <CardHeader><CardTitle className="text-lg">{allVideos.find(v=>v.id===t.video_id)?.title || 'Task '+t.id}</CardTitle></CardHeader>
                 <CardContent><Badge>{t.status}</Badge></CardContent>
               </Card>
