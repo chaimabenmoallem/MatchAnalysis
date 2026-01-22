@@ -1279,7 +1279,7 @@ class VideoEditor extends Component {
                             <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
                             <span className="text-sm font-medium text-emerald-700">Start Marked</span>
                           </div>
-                          <span className="text-sm font-mono text-emerald-600">{this.formatTime(lastStartTime)}</span>
+                          <span className="text-sm font-mono text-emerald-600">{this.formatTime(lastStartTime / 1000)}</span>
                         </div>
                         <p className="text-xs text-emerald-600 mt-1">Click "End" to complete the segment</p>
                       </div>
@@ -1425,7 +1425,7 @@ class VideoEditor extends Component {
                           <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse"></div>
                           <p className="text-sm text-amber-700 font-medium">Incomplete pair</p>
                         </div>
-                        <p className="text-xs text-amber-600 mt-1">Start: {this.formatTime(lastStartTime)} - Click End to complete</p>
+                        <p className="text-xs text-amber-600 mt-1">Start: {this.formatTime(lastStartTime / 1000)} - Click End to complete</p>
                       </div>
                     )}
                     </>
