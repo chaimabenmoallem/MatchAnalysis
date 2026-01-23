@@ -222,10 +222,7 @@ class UploadVideo extends Component {
     try {
       this.setState({ uploading: true });
       
-      const video = await videoService.create({
-        ...this.state.videoData,
-        sample_frames: JSON.stringify(this.state.videoData.sample_frames)
-      });
+      const video = await videoService.create(this.state.videoData);
       
       await videoTaskService.create({
         video_id: video.id,
@@ -234,7 +231,7 @@ class UploadVideo extends Component {
         priority: 'medium'
       });
 
-      this.props.navigate('/videoeditor');
+      this.props.navigate('/Pages/VideoEditor');
     } catch (err) {
       console.error('Error creating task:', err);
       this.setState({ error: `Failed to create task: ${err.message}`, uploading: false });
