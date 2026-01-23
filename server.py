@@ -160,19 +160,16 @@ def handle_segment(segment_id):
         if 'segment_type' in data: segment.segment_type = data['segment_type']
         db.session.commit()
         return jsonify({'id': segment.id})
+
+@app.route('/api/upload', methods=['POST'])
 def upload_file():
     if 'file' not in request.files:
         return jsonify({'error': 'No file part'}), 400
     file = request.files['file']
-    # Use the path provided or the filename
     path = request.form.get('path', file.filename)
-    
-    # Ensure directory exists relative to current working directory
     full_path = os.path.abspath(os.path.join(os.getcwd(), path))
     os.makedirs(os.path.dirname(full_path), exist_ok=True)
-    
     file.save(full_path)
-    # Return the path that can be used locally
     return jsonify({'path': path, 'url': path})
 
 @app.route('/api/videos', methods=['GET'])
@@ -192,13 +189,8 @@ def create_video():
         data = request.json
         if not data:
             return jsonify({'error': 'No data provided'}), 400
-            
-        # The frontend might send 'file_url' or 'url'
         url = data.get('url') or data.get('file_url')
-        
-        # If no ID is provided, generate one
         video_id = data.get('id') or str(int(datetime.utcnow().timestamp() * 1000))
-        
         video = Video(
             id=video_id,
             title=data.get('title', 'Untitled Video'),
@@ -207,7 +199,6 @@ def create_video():
         )
         db.session.add(video)
         db.session.commit()
-        
         return jsonify({
             'id': video.id,
             'title': video.title,
@@ -216,8 +207,6 @@ def create_video():
         }), 201
     except Exception as e:
         db.session.rollback()
-        import traceback
-        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 class VideoTask(db.Model):
@@ -239,20 +228,15 @@ class VideoTask(db.Model):
         self.notes = notes
         self.match_start_time = match_start_time
 
-# Routes
 @app.route('/api/tasks', methods=['GET'])
 def get_tasks():
-    # Basic filtering support for task_type
     task_type = request.args.get('task_type')
     query = VideoTask.query
     if task_type:
         query = query.filter_by(task_type=task_type)
-    
-    # Simple sort by created_at desc if requested
     sort = request.args.get('sort_by')
     if sort == '-created_at':
         query = query.order_by(VideoTask.created_at.desc())
-    
     tasks = query.all()
     return jsonify([{
         'id': t.id,
@@ -269,9 +253,6 @@ def get_tasks():
 def create_task():
     try:
         data = request.json
-        if not data:
-            return jsonify({'error': 'No data provided'}), 400
-            
         task_id = str(int(datetime.utcnow().timestamp() * 1000))
         task = VideoTask(
             id=task_id,
@@ -284,7 +265,6 @@ def create_task():
         )
         db.session.add(task)
         db.session.commit()
-        
         return jsonify({
             'id': task.id,
             'video_id': task.video_id,
@@ -292,8 +272,6 @@ def create_task():
         }), 201
     except Exception as e:
         db.session.rollback()
-        import traceback
-        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/tasks/<task_id>', methods=['GET'])
@@ -328,62 +306,39 @@ def get_annotations(video_id):
 def extract_frames():
     try:
         data = request.json
-        if not data:
-            return jsonify({'error': 'No JSON data provided'}), 400
-            
         video_url = data.get('url')
         if not video_url:
             return jsonify({'error': 'Video URL required'}), 400
-
-        print(f"Extracting frames for: {video_url}")
-
         local_path = None
         if not video_url.startswith('http'):
-            # Convert relative path to absolute path
             local_path = os.path.abspath(os.path.join(os.getcwd(), video_url))
             if not os.path.exists(local_path):
-                # Try finding it in workspace root
                 local_path = os.path.abspath(video_url)
                 if not os.path.exists(local_path):
-                    return jsonify({'error': f'Local file not found: {video_url} (checked {local_path})'}), 404
+                    return jsonify({'error': f'Local file not found: {video_url}'}), 404
         else:
-            try:
-                response = requests.get(video_url, stream=True, timeout=30)
-                if response.ok:
-                    fd, temp_path = tempfile.mkstemp(suffix='.mp4')
-                    with os.fdopen(fd, 'wb') as tmp:
-                        for chunk in response.iter_content(chunk_size=8192):
-                            tmp.write(chunk)
-                    local_path = temp_path
-                else:
-                    return jsonify({'error': f'Failed to download video from {video_url}'}), 400
-            except Exception as e:
-                return jsonify({'error': f'Download error: {str(e)}'}), 500
-
-        print(f"Opening video at: {local_path}")
+            response = requests.get(video_url, stream=True, timeout=30)
+            if response.ok:
+                fd, temp_path = tempfile.mkstemp(suffix='.mp4')
+                with os.fdopen(fd, 'wb') as tmp:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        tmp.write(chunk)
+                local_path = temp_path
+            else:
+                return jsonify({'error': f'Failed to download video'}), 400
         cap = cv2.VideoCapture(local_path)
         if not cap.isOpened():
-            error_msg = f'OpenCV could not open video: {video_url}'
-            print(error_msg)
-            return jsonify({'error': error_msg}), 400
-
+            return jsonify({'error': 'OpenCV could not open video'}), 400
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        print(f"Total frames: {total_frames}")
-        
         if total_frames <= 0:
-            # Fallback for videos where frame count is not reported
-            # Try to read first frame to see if it works
             ret, _ = cap.read()
             if not ret:
-                return jsonify({'error': 'Invalid video file (no frames readable)'}), 400
-            # If we can read frames but don't know total, just take 10 from the start or approximate
-            total_frames = 1000 # Dummy value
-
+                return jsonify({'error': 'Invalid video file'}), 400
+            total_frames = 1000
         frames = []
         start_frame = int(total_frames * 0.05)
         end_frame = int(total_frames * 0.95)
         usable_range = max(1, end_frame - start_frame)
-        
         for i in range(10):
             frame_idx = start_frame + int((i * usable_range) / 9)
             cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
@@ -393,24 +348,14 @@ def extract_frames():
                 _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
                 frame_base64 = base64.b64encode(buffer).decode('utf-8')
                 frames.append(f"data:image/jpeg;base64,{frame_base64}")
-            else:
-                print(f"Failed to read frame at index {frame_idx}")
-
         cap.release()
-        
         if local_path and local_path.startswith(tempfile.gettempdir()):
-            try:
-                os.remove(local_path)
-            except:
-                pass
-                
+            try: os.remove(local_path)
+            except: pass
         if not frames:
-            return jsonify({'error': 'No frames could be extracted from the video'}), 500
-            
+            return jsonify({'error': 'No frames extracted'}), 500
         return jsonify({'frames': frames})
     except Exception as e:
-        import traceback
-        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
