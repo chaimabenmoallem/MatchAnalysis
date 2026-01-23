@@ -1,5 +1,5 @@
 import React, { Component } from 'react';
-import { videoTagService, videoSegmentService, videoTaskService, videoService, storageService, actionAnnotationService } from '../api/apiClient';
+import { videoTagService, videoSegmentService, videoTaskService, videoService, storageService } from '../api/apiClient';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createPageUrl } from '../utils';
 import { Card, CardContent, CardHeader, CardTitle } from "../Components/ui/card";
@@ -1016,17 +1016,19 @@ class VideoEditor extends Component {
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <Button
-              onClick={() => this.setState({ showGallery: true })}
-              variant="outline"
-              className="bg-white hover:bg-slate-50 border-slate-200 shadow-sm gap-2"
-            >
-              <User className="w-4 h-4 text-slate-600" />
-              <span className="text-slate-700 font-medium">View Player Identification Gallery</span>
-              <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-0 ml-1">
-                {(video?.sample_frames || this.state.timelineFrames || []).filter(f => f.annotation).length}/{(video?.sample_frames || this.state.timelineFrames || []).length || 10}
-              </Badge>
-            </Button>
+            {((video?.sample_frames && video.sample_frames.length > 0) || (this.state.timelineFrames && this.state.timelineFrames.length > 0)) && (
+              <Button
+                onClick={() => this.setState({ showGallery: true })}
+                variant="outline"
+                className="gap-2"
+              >
+                <User className="w-4 h-4" />
+                View Player Identification Gallery
+                <span className="ml-1 px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded text-xs">
+                  {(video?.sample_frames || this.state.timelineFrames).filter(f => f.annotation).length}/{(video?.sample_frames || this.state.timelineFrames).length}
+                </span>
+              </Button>
+            )}
             {task && (
               <>
                 <Button 

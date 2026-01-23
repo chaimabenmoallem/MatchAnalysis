@@ -114,7 +114,7 @@ export default function PlayerIdentificationGallery({ frames, playerName, onClos
         <div ref={containerRef} className="relative w-full h-full flex items-center justify-center p-4">
           <img
             ref={imageRef}
-            src={currentFrame.frame_url || currentFrame.url}
+            src={currentFrame.frame_url}
             alt={`Frame ${currentIndex + 1}`}
             className="w-full h-full object-contain"
             onLoad={calculateImageRect}
@@ -169,7 +169,7 @@ export default function PlayerIdentificationGallery({ frames, playerName, onClos
               }`}
             >
               <img
-                src={frame.frame_url || frame.url}
+                src={frame.frame_url}
                 alt={`Thumbnail ${idx + 1}`}
                 className="w-full h-full object-cover"
               />
