@@ -139,14 +139,18 @@ export default function AnalystDashboard() {
 
   const { data: annotations = [] } = useQuery({
     queryKey: ['annotations', taskId],
-    queryFn: () => actionAnnotationService.list(task?.video_id),
+    queryFn: async () => {
+      const res = await actionAnnotationService.list(task?.video_id);
+      console.log('Fetched annotations for video:', task?.video_id, res);
+      return Array.isArray(res) ? res : (res?.data || []);
+    },
     enabled: !!task?.video_id
   });
 
   const createAnnotationMutation = useMutation({
     mutationFn: (data) => actionAnnotationService.create(data),
     onSuccess: () => {
-      console.log('Annotation saved successfully');
+      console.log('Annotation saved successfully, invalidating query for taskId:', taskId);
       queryClient.invalidateQueries({ queryKey: ['annotations', taskId] });
       resetAnnotation();
     },
@@ -1042,39 +1046,54 @@ export default function AnalystDashboard() {
         </CardHeader>
         <CardContent>
           {annotations.length === 0 ? (
-            <p className="text-center py-8 text-slate-500">
-              No actions annotated yet. Mark action start/end times and fill in the details above.
-            </p>
+            <div className="py-12 text-center bg-slate-50 rounded-xl border-2 border-dashed border-slate-200">
+              <p className="text-slate-400">No actions annotated yet. Mark action start/end times and fill in the details above.</p>
+            </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {annotations.map((ann) => {
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {annotations.map((ann, idx) => {
                 const cat = actionCategories.find(c => c.id === ann.action_category);
+                const Icon = cat?.icon || Crosshair;
                 return (
                   <div
-                    key={ann.id}
-                    className="p-3 bg-slate-50 rounded-lg hover:bg-slate-100 cursor-pointer"
+                    key={ann.id || idx}
+                    className="p-3 bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-all group cursor-pointer"
                     onClick={() => {
                       if (videoRef.current) {
-                        videoRef.current.currentTime = ann.start_time;
+                        videoRef.current.currentTime = ann.start_time / 1000;
                       }
                     }}
                   >
                     <div className="flex items-center justify-between mb-2">
-                      <Badge className={`${cat?.color} text-white`}>
-                        {cat?.label}
+                      <Badge className={`${cat?.color || 'bg-slate-500'} text-white`}>
+                        <Icon className="w-3 h-3 mr-1" />
+                        {cat?.label || ann.action_category}
                       </Badge>
                       <span className="text-xs text-slate-500 font-mono">
-                        {formatTime(ann.start_time)}
+                        {formatTime(ann.start_time / 1000)}
                       </span>
                     </div>
-                    <div className="text-sm">
-                      <span className={ann.outcome === 'successful' ? 'text-emerald-600' : 'text-red-600'}>
-                        {ann.outcome}
+                    <div className="flex flex-wrap gap-1">
+                      <span className={`text-xs font-medium capitalize ${ann.outcome === 'successful' ? 'text-emerald-600' : 'text-red-600'}`}>
+                        {ann.outcome?.replace(/_/g, ' ')}
                       </span>
-                      {ann.pass_length && <span className="text-slate-500"> • {ann.pass_length}</span>}
-                      {ann.shot_result && <span className="text-slate-500"> • {ann.shot_result}</span>}
+                      {ann.shot_result && (
+                        <>
+                          <span className="text-xs text-slate-300">•</span>
+                          <span className="text-xs text-slate-600 capitalize">{ann.shot_result?.replace(/_/g, ' ')}</span>
+                        </>
+                      )}
+                      {ann.pass_length && (
+                        <>
+                          <span className="text-xs text-slate-300">•</span>
+                          <span className="text-xs text-slate-600 capitalize">{ann.pass_length}</span>
+                        </>
+                      )}
                       {ann.defensive_action_type && (
-                        <span className="text-slate-500"> • {ann.defensive_action_type.replace(/_/g, ' ')}</span>
+                        <>
+                          <span className="text-xs text-slate-300">•</span>
+                          <span className="text-xs text-slate-600 capitalize">{ann.defensive_action_type?.replace(/_/g, ' ')}</span>
+                        </>
                       )}
                     </div>
                   </div>
