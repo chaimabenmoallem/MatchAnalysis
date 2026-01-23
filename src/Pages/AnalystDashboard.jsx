@@ -481,6 +481,12 @@ export default function AnalystDashboard() {
     );
   }
 
+  const getVideoUrl = (url) => {
+    if (!url) return '';
+    if (url.startsWith('http')) return url;
+    return `/${url}`;
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -519,7 +525,7 @@ export default function AnalystDashboard() {
             <>
               <video
                 ref={videoRef}
-                src={video?.url || video?.file_url}
+                src={getVideoUrl(video?.url || video?.file_url)}
                 className="w-full h-[350px] object-contain"
                 onTimeUpdate={() => {
                   if (!currentSegment) return;
