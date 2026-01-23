@@ -116,8 +116,8 @@ export default function AnalystDashboard() {
     queryKey: ['task', taskId],
     queryFn: async () => {
       if (!taskId) return null;
-      const tasks = await videoTaskService.filter({ id: taskId });
-      return tasks[0];
+      const tasks = await videoTaskService.list();
+      return tasks.find(t => t.id === taskId);
     },
     enabled: !!taskId
   });
@@ -126,8 +126,7 @@ export default function AnalystDashboard() {
     queryKey: ['video', task?.video_id],
     queryFn: async () => {
       if (!task?.video_id) return null;
-      const videos = await videoService.filter({ id: task.video_id });
-      return videos[0];
+      return await videoService.get(task.video_id);
     },
     enabled: !!task?.video_id
   });
