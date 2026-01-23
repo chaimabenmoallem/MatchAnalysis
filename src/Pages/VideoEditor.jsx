@@ -1012,11 +1012,11 @@ class VideoEditor extends Component {
           <div>
             <h2 className="text-xl font-bold text-slate-900">{video?.title}</h2>
             <p className="text-slate-500">
-              {video?.home_team} vs {video?.away_team} • {video?.player_name} #{video?.jersey_number}
+              {video?.home_team || 'vs'} {video?.away_team || ''} • {video?.player_name || ''} {video?.jersey_number ? `#${video.jersey_number}` : ''}
             </p>
           </div>
           <div className="flex items-center gap-3">
-            {video?.sample_frames && video.sample_frames.length > 0 && (
+            {((video?.sample_frames && video.sample_frames.length > 0) || (this.state.timelineFrames && this.state.timelineFrames.length > 0)) && (
               <Button
                 onClick={() => this.setState({ showGallery: true })}
                 variant="outline"
@@ -1025,7 +1025,7 @@ class VideoEditor extends Component {
                 <User className="w-4 h-4" />
                 View Player Identification Gallery
                 <span className="ml-1 px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded text-xs">
-                  {video.sample_frames.filter(f => f.annotation).length}/{video.sample_frames.length}
+                  {(video?.sample_frames || this.state.timelineFrames).filter(f => f.annotation).length}/{(video?.sample_frames || this.state.timelineFrames).length}
                 </span>
               </Button>
             )}
@@ -1214,10 +1214,10 @@ class VideoEditor extends Component {
         </Card>
 
         {/* Player Identification Gallery */}
-        {showGallery && video?.sample_frames && (
+        {showGallery && (video?.sample_frames || this.state.timelineFrames) && (
           <PlayerIdentificationGallery
-            frames={video.sample_frames}
-            playerName={video.player_name}
+            frames={video?.sample_frames || this.state.timelineFrames}
+            playerName={video?.player_name}
             onClose={() => this.setState({ showGallery: false })}
           />
         )}

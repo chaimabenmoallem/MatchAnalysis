@@ -4,6 +4,7 @@ import cv2
 import base64
 import requests
 import tempfile
+import json
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from datetime import datetime
@@ -29,13 +30,23 @@ class Video(db.Model):
     title = db.Column(db.String(255), nullable=False)
     url = db.Column(db.String(1000))
     status = db.Column(db.String(50), default='pending')
+    home_team = db.Column(db.String(255))
+    away_team = db.Column(db.String(255))
+    player_name = db.Column(db.String(255))
+    jersey_number = db.Column(db.String(50))
+    sample_frames = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    def __init__(self, id, title, url=None, status='pending'):
+    def __init__(self, id, title, url=None, status='pending', home_team=None, away_team=None, player_name=None, jersey_number=None, sample_frames=None):
         self.id = id
         self.title = title
         self.url = url
         self.status = status
+        self.home_team = home_team
+        self.away_team = away_team
+        self.player_name = player_name
+        self.jersey_number = jersey_number
+        self.sample_frames = sample_frames
 
 class ActionAnnotation(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -180,6 +191,11 @@ def get_videos():
         'title': v.title,
         'url': v.url,
         'status': v.status,
+        'home_team': v.home_team,
+        'away_team': v.away_team,
+        'player_name': v.player_name,
+        'jersey_number': v.jersey_number,
+        'sample_frames': json.loads(v.sample_frames) if v.sample_frames else [],
         'created_at': v.created_at.isoformat()
     } for v in videos])
 
@@ -195,7 +211,11 @@ def create_video():
             id=video_id,
             title=data.get('title', 'Untitled Video'),
             url=url,
-            status=data.get('status', 'uploaded')
+            status=data.get('status', 'uploaded'),
+            home_team=data.get('home_team'),
+            away_team=data.get('away_team'),
+            player_name=data.get('player_name'),
+            jersey_number=data.get('jersey_number')
         )
         db.session.add(video)
         db.session.commit()
@@ -347,13 +367,24 @@ def extract_frames():
                 frame = cv2.resize(frame, (480, 270))
                 _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
                 frame_base64 = base64.b64encode(buffer).decode('utf-8')
-                frames.append(f"data:image/jpeg;base64,{frame_base64}")
+                frames.append({
+                    'id': i,
+                    'url': f"data:image/jpeg;base64,{frame_base64}",
+                    'annotation': None
+                })
         cap.release()
         if local_path and local_path.startswith(tempfile.gettempdir()):
             try: os.remove(local_path)
             except: pass
         if not frames:
             return jsonify({'error': 'No frames extracted'}), 500
+        
+        # Try to persist frames to video record
+        video = Video.query.filter((Video.url == video_url) | (Video.url == video_url.replace('/videos/', ''))).first()
+        if video:
+            video.sample_frames = json.dumps(frames)
+            db.session.commit()
+            
         return jsonify({'frames': frames})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
