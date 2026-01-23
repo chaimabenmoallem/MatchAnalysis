@@ -299,6 +299,7 @@ def get_task(task_id):
 @app.route('/api/annotations/<video_id>', methods=['GET'])
 def get_annotations(video_id):
     annotations = ActionAnnotation.query.filter_by(video_id=video_id).all()
+    print(f"Fetching annotations for {video_id}: {len(annotations)} found")
     return jsonify([{
         'id': a.id,
         'video_id': a.video_id,
@@ -318,6 +319,7 @@ def get_annotations(video_id):
 def create_annotation():
     try:
         data = request.json
+        print(f"Creating annotation: {data}")
         annotation = ActionAnnotation(
             video_id=data.get('video_id'),
             start_time=data.get('start_time'),
@@ -333,8 +335,10 @@ def create_annotation():
         )
         db.session.add(annotation)
         db.session.commit()
+        print(f"Annotation saved with ID: {annotation.id}")
         return jsonify({'id': annotation.id}), 201
     except Exception as e:
+        print(f"Error saving annotation: {str(e)}")
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
 

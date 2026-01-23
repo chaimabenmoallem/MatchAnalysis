@@ -132,9 +132,17 @@ export const actionAnnotationService = {
     if (!response.ok) throw new Error('Failed to extract frames');
     return await response.json();
   },
+  async create(data) {
+    const response = await fetch(`${API_BASE_URL}/annotations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    if (!response.ok) throw new Error('Failed to create annotation');
+    return await response.json();
+  },
   filter: async () => [],
   get: async () => null,
-  create: async (data) => data,
   update: async (id, data) => data,
   delete: async () => {}
 };
