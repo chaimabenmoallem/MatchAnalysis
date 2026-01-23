@@ -79,6 +79,8 @@ export default function PlayerIdentificationGallery({ frames, playerName, onClos
   };
 
   const currentFrame = frames[currentIndex];
+  const annotation = currentFrame?.annotation;
+  const annotationData = typeof annotation === 'string' ? JSON.parse(annotation) : annotation;
 
   return (
     <div className="fixed inset-0 z-[100] bg-black" onClick={onClose}>
@@ -121,14 +123,14 @@ export default function PlayerIdentificationGallery({ frames, playerName, onClos
           />
 
           {/* Annotation marker */}
-          {currentFrame.annotation && imageRect && (
+          {annotationData && imageRect && (
             <div
               className="absolute border-4 border-emerald-500 bg-emerald-500/20 rounded-lg transform -translate-x-1/2 -translate-y-1/2 shadow-2xl"
               style={{
-                left: `${imageRect.left + (imageRect.width * currentFrame.annotation.x / 100)}px`,
-                top: `${imageRect.top + (imageRect.height * currentFrame.annotation.y / 100)}px`,
-                width: `${currentFrame.annotation.width || 150}px`,
-                height: `${currentFrame.annotation.height || 150}px`
+                left: `${imageRect.left + (imageRect.width * (annotationData.x || 0) / 100)}px`,
+                top: `${imageRect.top + (imageRect.height * (annotationData.y || 0) / 100)}px`,
+                width: `${annotationData.width || 150}px`,
+                height: `${annotationData.height || 150}px`
               }}
             >
               <div className="absolute -top-10 left-1/2 -translate-x-1/2 whitespace-nowrap bg-emerald-500 text-white px-3 py-1.5 rounded-lg font-medium shadow-lg text-sm">
@@ -142,7 +144,7 @@ export default function PlayerIdentificationGallery({ frames, playerName, onClos
             <span className="font-mono text-lg">{formatTime(currentFrame?.timestamp || 0)}</span>
             <span className="text-slate-400">|</span>
             <span className="text-lg">Frame {currentIndex + 1} / {frames.length}</span>
-            {currentFrame?.annotation && (
+            {annotationData && (
               <>
                 <span className="text-slate-400">|</span>
                 <div className="flex items-center gap-2 text-emerald-400">
@@ -173,7 +175,7 @@ export default function PlayerIdentificationGallery({ frames, playerName, onClos
                 alt={`Thumbnail ${idx + 1}`}
                 className="w-full h-full object-cover"
               />
-              {frame.annotation && (
+              {(frame?.annotation || (typeof frame?.annotation === 'string' && frame.annotation !== 'null')) && (
                 <div className="absolute top-0.5 right-0.5 bg-emerald-500 rounded-full p-0.5">
                   <CheckCircle2 className="w-2 h-2 text-white" />
                 </div>
