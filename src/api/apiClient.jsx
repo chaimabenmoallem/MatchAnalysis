@@ -134,7 +134,15 @@ export const actionAnnotationService = {
   },
   filter: async () => [],
   get: async () => null,
-  create: async (data) => data,
+  create: async (data) => {
+    const response = await fetch(`${API_BASE_URL}/annotations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    if (!response.ok) throw new Error('Failed to create annotation');
+    return await response.json();
+  },
   update: async (id, data) => data,
   delete: async () => {}
 };

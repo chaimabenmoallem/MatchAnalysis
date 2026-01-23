@@ -290,6 +290,24 @@ def get_task(task_id):
         'created_at': task.created_at.isoformat()
     })
 
+@app.route('/api/annotations', methods=['POST'])
+def create_annotation():
+    try:
+        data = request.json
+        annotation = ActionAnnotation(
+            video_id=data.get('video_id'),
+            start_time=data.get('start_time'),
+            end_time=data.get('end_time'),
+            action_category=data.get('action_category'),
+            note=data.get('note')
+        )
+        db.session.add(annotation)
+        db.session.commit()
+        return jsonify({'id': annotation.id}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/annotations/<video_id>', methods=['GET'])
 def get_annotations(video_id):
     annotations = ActionAnnotation.query.filter_by(video_id=video_id).all()
