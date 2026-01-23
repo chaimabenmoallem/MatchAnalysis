@@ -427,38 +427,37 @@ export default function AnalystDashboard() {
                   className="border-0 shadow-sm hover:shadow-md transition-shadow cursor-pointer group"
                   onClick={() => navigate(createPageUrl('AnalystDashboard') + `?taskId=${task.id}`)}
                 >
-                  <CardHeader className="pb-2">
+                  <CardHeader>
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
-                        <CardTitle className="text-lg font-bold text-slate-900 group-hover:text-emerald-600 transition-colors">
+                        <CardTitle className="text-base group-hover:text-emerald-600 transition-colors">
                           {video?.title || 'Untitled Video'}
                         </CardTitle>
-                        <div className="text-sm text-slate-500 mt-1 flex items-center">
-                          <Clock className="w-3 h-3 mr-1" />
+                        <p className="text-sm text-slate-500 mt-1">
                           {new Date(task.created_at).toLocaleDateString()}
-                        </div>
+                        </p>
                       </div>
-                      <Badge className={`${statusColors[task.status]} capitalize px-3 py-1`}>
+                      <Badge className={statusColors[task.status]}>
                         {task.status.replace(/_/g, ' ')}
                       </Badge>
                     </div>
                   </CardHeader>
                   <CardContent>
-                    <div className="space-y-3">
-                      <div className="flex items-center text-slate-600 text-sm bg-slate-50 p-2 rounded-lg border border-slate-100">
-                        <Video className="w-4 h-4 mr-2 text-slate-400" />
-                        <span className="font-medium truncate">
-                          {video?.home_team && video?.away_team ? `${video.home_team} vs ${video.away_team}` : (video?.url?.split('/').pop() || 'Video file')}
-                        </span>
-                      </div>
-                      <div className="flex items-center text-slate-600 text-sm bg-slate-50 p-2 rounded-lg border border-slate-100">
-                        <User className="w-4 h-4 mr-2 text-slate-400" />
-                        <span className="font-medium">
-                          {video?.player_name || 'No player assigned'}
-                        </span>
-                      </div>
+                    <div className="space-y-2 text-sm">
+                      {video?.home_team && video?.away_team && (
+                        <div className="flex items-center gap-2 text-slate-600">
+                          <Video className="w-4 h-4" />
+                          <span>{video.home_team} vs {video.away_team}</span>
+                        </div>
+                      )}
+                      {video?.player_name && (
+                        <div className="flex items-center gap-2 text-slate-600">
+                          <Users className="w-4 h-4" />
+                          <span>{video.player_name}</span>
+                        </div>
+                      )}
                       {task.assigned_to && (
-                        <div className="flex items-center gap-2 text-slate-500 text-xs px-1">
+                        <div className="flex items-center gap-2 text-slate-500 text-xs">
                           <span>Assigned to: {task.assigned_to}</span>
                         </div>
                       )}

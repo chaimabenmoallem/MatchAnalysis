@@ -228,8 +228,7 @@ class UploadVideo extends Component {
         video_id: video.id,
         task_type: 'video_processing',
         status: 'pending_processing',
-        priority: 'medium',
-        notes: this.state.videoData.player_name || ''
+        priority: 'medium'
       });
 
       this.props.navigate('/Pages/VideoEditor');

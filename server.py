@@ -31,20 +31,11 @@ class Video(db.Model):
     status = db.Column(db.String(50), default='pending')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    home_team = db.Column(db.String(100))
-    away_team = db.Column(db.String(100))
-    player_name = db.Column(db.String(100))
-    jersey_number = db.Column(db.String(20))
-
-    def __init__(self, id, title, url=None, status='pending', home_team=None, away_team=None, player_name=None, jersey_number=None):
+    def __init__(self, id, title, url=None, status='pending'):
         self.id = id
         self.title = title
         self.url = url
         self.status = status
-        self.home_team = home_team
-        self.away_team = away_team
-        self.player_name = player_name
-        self.jersey_number = jersey_number
 
 class ActionAnnotation(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -189,10 +180,6 @@ def get_videos():
         'title': v.title,
         'url': v.url,
         'status': v.status,
-        'home_team': v.home_team,
-        'away_team': v.away_team,
-        'player_name': v.player_name,
-        'jersey_number': v.jersey_number,
         'created_at': v.created_at.isoformat()
     } for v in videos])
 
@@ -208,11 +195,7 @@ def create_video():
             id=video_id,
             title=data.get('title', 'Untitled Video'),
             url=url,
-            status=data.get('status', 'uploaded'),
-            home_team=data.get('home_team'),
-            away_team=data.get('away_team'),
-            player_name=data.get('player_name'),
-            jersey_number=data.get('jersey_number')
+            status=data.get('status', 'uploaded')
         )
         db.session.add(video)
         db.session.commit()
