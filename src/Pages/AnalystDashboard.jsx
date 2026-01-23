@@ -519,7 +519,7 @@ export default function AnalystDashboard() {
             <>
               <video
                 ref={videoRef}
-                src={video?.file_url}
+                src={video?.url || video?.file_url}
                 className="w-full h-[350px] object-contain"
                 onTimeUpdate={() => {
                   if (!currentSegment) return;
