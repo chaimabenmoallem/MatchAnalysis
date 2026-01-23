@@ -139,8 +139,8 @@ export default function AnalystDashboard() {
 
   const { data: annotations = [] } = useQuery({
     queryKey: ['annotations', taskId],
-    queryFn: () => actionAnnotationService.filter({ video_id: task?.video_id }),
-    enabled: !!taskId
+    queryFn: () => actionAnnotationService.list(task?.video_id),
+    enabled: !!task?.video_id
   });
 
   const createAnnotationMutation = useMutation({
