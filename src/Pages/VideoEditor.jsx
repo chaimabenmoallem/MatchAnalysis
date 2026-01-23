@@ -251,6 +251,20 @@ class VideoEditor extends Component {
       const result = await actionAnnotationService.extractFrames(videoUrl);
       if (result && result.frames) {
         this.setState({ timelineFrames: result.frames });
+        
+        // If the current video in state is the one we just extracted frames for,
+        // and it doesn't have sample_frames, update it with the extracted frames
+        // to ensure the gallery has access to them with potential annotations.
+        if (this.state.video && (this.state.video.url === videoUrl || videoUrl.includes(this.state.video.url))) {
+           this.setState(prevState => ({
+             video: {
+               ...prevState.video,
+               sample_frames: prevState.video.sample_frames?.length > 0 
+                 ? prevState.video.sample_frames 
+                 : result.frames
+             }
+           }));
+        }
       }
     } catch (error) {
       console.error('Error extracting frames:', error);

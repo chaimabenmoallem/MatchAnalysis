@@ -80,7 +80,43 @@ export default function PlayerIdentificationGallery({ frames, playerName, onClos
 
   const currentFrame = frames[currentIndex];
   const annotation = currentFrame?.annotation;
-  const annotationData = typeof annotation === 'string' ? JSON.parse(annotation) : annotation;
+  
+  let annotationData = null;
+  try {
+    if (annotation) {
+      if (typeof annotation === 'string') {
+        try {
+          annotationData = JSON.parse(annotation);
+          if (typeof annotationData === 'string') {
+            annotationData = JSON.parse(annotationData);
+          }
+        } catch (e) {
+          // If it's not JSON, maybe it's the raw value or something else
+        }
+      } else {
+        annotationData = annotation;
+      }
+    }
+    
+    // Fallback: If no annotation object, check if there are coordinate fields directly on the frame
+    if (!annotationData && currentFrame?.x !== undefined && currentFrame?.y !== undefined) {
+      annotationData = {
+        x: currentFrame.x,
+        y: currentFrame.y,
+        width: currentFrame.width || 10,
+        height: currentFrame.height || 10
+      };
+    }
+  } catch (e) {
+    console.error('Error parsing annotation:', e, annotation);
+  }
+
+  // Force a re-render/re-calculate when annotationData changes
+  React.useEffect(() => {
+    if (annotationData) {
+      calculateImageRect();
+    }
+  }, [currentIndex, !!annotationData]);
 
   return (
     <div className="fixed inset-0 z-[100] bg-black" onClick={onClose}>
@@ -125,16 +161,18 @@ export default function PlayerIdentificationGallery({ frames, playerName, onClos
           {/* Annotation marker */}
           {annotationData && imageRect && (
             <div
-              className="absolute border-4 border-emerald-500 bg-emerald-500/20 rounded-lg transform -translate-x-1/2 -translate-y-1/2 shadow-2xl"
+              className="absolute border-2 border-emerald-500 bg-emerald-500/10 rounded-lg transform -translate-x-1/2 -translate-y-1/2 shadow-lg z-20 pointer-events-none"
               style={{
                 left: `${imageRect.left + (imageRect.width * (annotationData.x || 0) / 100)}px`,
                 top: `${imageRect.top + (imageRect.height * (annotationData.y || 0) / 100)}px`,
-                width: `${annotationData.width || 150}px`,
-                height: `${annotationData.height || 150}px`
+                width: `${(imageRect.width * (annotationData.width || 10) / 100)}px`,
+                height: `${(imageRect.height * (annotationData.height || 10) / 100)}px`,
+                minWidth: '30px',
+                minHeight: '30px'
               }}
             >
-              <div className="absolute -top-10 left-1/2 -translate-x-1/2 whitespace-nowrap bg-emerald-500 text-white px-3 py-1.5 rounded-lg font-medium shadow-lg text-sm">
-                {playerName}
+              <div className="absolute -top-7 left-1/2 -translate-x-1/2 whitespace-nowrap bg-emerald-500 text-white px-2 py-0.5 rounded font-medium shadow-md text-[10px] z-30">
+                {playerName || 'Player'}
               </div>
             </div>
           )}
@@ -175,7 +213,9 @@ export default function PlayerIdentificationGallery({ frames, playerName, onClos
                 alt={`Thumbnail ${idx + 1}`}
                 className="w-full h-full object-cover"
               />
-              {(frame?.annotation || (typeof frame?.annotation === 'string' && frame.annotation !== 'null')) && (
+              {(frame?.annotation || 
+                (typeof frame?.annotation === 'string' && frame.annotation !== 'null' && frame.annotation !== '') ||
+                (frame?.x !== undefined && frame?.y !== undefined)) && (
                 <div className="absolute top-0.5 right-0.5 bg-emerald-500 rounded-full p-0.5">
                   <CheckCircle2 className="w-2 h-2 text-white" />
                 </div>
