@@ -114,7 +114,7 @@ export default function PlayerIdentificationGallery({ frames, playerName, onClos
         <div ref={containerRef} className="relative w-full h-full flex items-center justify-center p-4">
           <img
             ref={imageRef}
-            src={currentFrame.frame_url || currentFrame.url}
+            src={currentFrame?.frame_url || currentFrame?.url}
             alt={`Frame ${currentIndex + 1}`}
             className="w-full h-full object-contain"
             onLoad={calculateImageRect}
@@ -139,10 +139,10 @@ export default function PlayerIdentificationGallery({ frames, playerName, onClos
 
           {/* Info overlay */}
           <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-4 bg-black/70 text-white px-6 py-3 rounded-lg">
-            <span className="font-mono text-lg">{formatTime(currentFrame.timestamp)}</span>
+            <span className="font-mono text-lg">{formatTime(currentFrame?.timestamp || 0)}</span>
             <span className="text-slate-400">|</span>
             <span className="text-lg">Frame {currentIndex + 1} / {frames.length}</span>
-            {currentFrame.annotation && (
+            {currentFrame?.annotation && (
               <>
                 <span className="text-slate-400">|</span>
                 <div className="flex items-center gap-2 text-emerald-400">
@@ -169,7 +169,7 @@ export default function PlayerIdentificationGallery({ frames, playerName, onClos
               }`}
             >
               <img
-                src={frame.frame_url || frame.url}
+                src={frame?.frame_url || frame?.url}
                 alt={`Thumbnail ${idx + 1}`}
                 className="w-full h-full object-cover"
               />
