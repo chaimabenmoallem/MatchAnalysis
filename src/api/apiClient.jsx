@@ -123,20 +123,6 @@ export const actionAnnotationService = {
     if (!response.ok) throw new Error('Failed to fetch annotations');
     return await response.json();
   },
-  async filter(filterData) {
-    const videoId = filterData?.video_id;
-    if (!videoId) return [];
-    return this.list(videoId);
-  },
-  async create(data) {
-    const response = await fetch(`${API_BASE_URL}/annotations`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
-    });
-    if (!response.ok) throw new Error('Failed to create annotation');
-    return await response.json();
-  },
   async extractFrames(videoUrl) {
     const response = await fetch(`${API_BASE_URL}/extract-frames`, {
       method: 'POST',
