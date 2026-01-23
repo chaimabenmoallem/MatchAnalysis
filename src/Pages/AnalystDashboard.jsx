@@ -138,16 +138,16 @@ export default function AnalystDashboard() {
   });
 
   const { data: annotations = [] } = useQuery({
-    queryKey: ['annotations', taskId],
-    queryFn: () => actionAnnotationService.filter({ video_id: task?.video_id }),
-    enabled: !!taskId
+    queryKey: ['annotations', task?.video_id],
+    queryFn: () => actionAnnotationService.list(task?.video_id),
+    enabled: !!task?.video_id
   });
 
   const createAnnotationMutation = useMutation({
     mutationFn: (data) => actionAnnotationService.create(data),
     onSuccess: () => {
       console.log('Annotation saved successfully');
-      queryClient.invalidateQueries({ queryKey: ['annotations', taskId] });
+      queryClient.invalidateQueries({ queryKey: ['annotations', task?.video_id] });
       resetAnnotation();
     },
     onError: (error) => {

@@ -44,6 +44,12 @@ class ActionAnnotation(db.Model):
     end_time = db.Column(db.Float)
     action_category = db.Column(db.String(100))
     note = db.Column(db.Text)
+    pitch_start_x = db.Column(db.Float)
+    pitch_start_y = db.Column(db.Float)
+    pitch_end_x = db.Column(db.Float)
+    pitch_end_y = db.Column(db.Float)
+    outcome = db.Column(db.String(50))
+    context = db.Column(db.String(50))
 
 class VideoTag(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -299,8 +305,38 @@ def get_annotations(video_id):
         'start_time': a.start_time,
         'end_time': a.end_time,
         'action_category': a.action_category,
-        'note': a.note
+        'note': a.note,
+        'pitch_start_x': a.pitch_start_x,
+        'pitch_start_y': a.pitch_start_y,
+        'pitch_end_x': a.pitch_end_x,
+        'pitch_end_y': a.pitch_end_y,
+        'outcome': a.outcome,
+        'context': a.context
     } for a in annotations])
+
+@app.route('/api/annotations', methods=['POST'])
+def create_annotation():
+    try:
+        data = request.json
+        annotation = ActionAnnotation(
+            video_id=data.get('video_id'),
+            start_time=data.get('start_time'),
+            end_time=data.get('end_time'),
+            action_category=data.get('action_category'),
+            note=data.get('note'),
+            pitch_start_x=data.get('pitch_start_x'),
+            pitch_start_y=data.get('pitch_start_y'),
+            pitch_end_x=data.get('pitch_end_x'),
+            pitch_end_y=data.get('pitch_end_y'),
+            outcome=data.get('outcome'),
+            context=data.get('context')
+        )
+        db.session.add(annotation)
+        db.session.commit()
+        return jsonify({'id': annotation.id}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/extract-frames', methods=['POST'])
 def extract_frames():
