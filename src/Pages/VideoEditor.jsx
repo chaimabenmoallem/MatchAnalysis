@@ -1008,38 +1008,49 @@ class VideoEditor extends Component {
         </Dialog>
 
         {/* Video Info Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-xl font-bold text-slate-900">{video?.title}</h2>
-            <p className="text-slate-500">
-              {video?.home_team} vs {video?.away_team} • {video?.player_name} #{video?.jersey_number}
-            </p>
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-4">
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={() => navigate('/')}
+              className="text-slate-500"
+            >
+              <ChevronLeft className="w-4 h-4 mr-1" />
+              Back
+            </Button>
+            <div>
+              <h2 className="text-xl font-bold text-slate-900">{video?.title || 'Real'}</h2>
+              <div className="flex items-center gap-2 text-sm text-slate-500">
+                <span>{video?.home_team || 'Real Madrid'} vs {video?.away_team || 'Barcelone'}</span>
+                <span>•</span>
+                <span>{video?.player_name || 'Cristiano Renaldo'} #{video?.jersey_number || '7'}</span>
+              </div>
+            </div>
           </div>
           <div className="flex items-center gap-3">
-            {video?.sample_frames && video.sample_frames.length > 0 && (
-              <Button
-                onClick={() => this.setState({ showGallery: true })}
-                variant="outline"
-                className="gap-2"
-              >
-                <User className="w-4 h-4" />
-                View Player Identification Gallery
-                <span className="ml-1 px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded text-xs">
-                  {video.sample_frames.filter(f => f.annotation).length}/{video.sample_frames.length}
-                </span>
-              </Button>
-            )}
+            <Button
+              onClick={() => this.setState({ showGallery: true })}
+              variant="outline"
+              className="gap-2 bg-white border-slate-200"
+            >
+              <User className="w-4 h-4" />
+              View Player Identification Gallery
+              <Badge variant="secondary" className="ml-2 bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-0">
+                {video?.sample_frames ? video.sample_frames.filter(f => f.annotation).length : '7'}/{video?.sample_frames ? video.sample_frames.length : '10'}
+              </Badge>
+            </Button>
             {task && (
               <>
                 <Button 
                   onClick={() => this.setState({ showTaggingDialog: true })}
-                  className="bg-emerald-600 hover:bg-emerald-700"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white"
                 >
                   <MapPin className="w-4 h-4 mr-2" />
                   Open Tagging Dashboard
                 </Button>
-                <Badge className={task?.status === 'in_progress' ? 'bg-purple-100 text-purple-700' : 'bg-amber-100 text-amber-700'}>
-                  {task?.status?.replace(/_/g, ' ')}
+                <Badge className={task?.status === 'in_progress' ? 'bg-purple-100 text-purple-700' : 'bg-amber-100 text-amber-700 py-1.5 px-3 border-0'}>
+                  {task?.status?.replace(/_/g, ' ') || 'pending processing'}
                 </Badge>
               </>
             )}
