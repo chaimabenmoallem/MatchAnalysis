@@ -1020,11 +1020,11 @@ class VideoEditor extends Component {
               Back
             </Button>
             <div>
-              <h2 className="text-xl font-bold text-slate-900">{video?.title || 'Real'}</h2>
+              <h2 className="text-xl font-bold text-slate-900">{video?.title}</h2>
               <div className="flex items-center gap-2 text-sm text-slate-500">
-                <span>{video?.home_team || 'Real Madrid'} vs {video?.away_team || 'Barcelone'}</span>
+                <span>{video?.home_team} vs {video?.away_team}</span>
                 <span>•</span>
-                <span>{video?.player_name || 'Cristiano Renaldo'} #{video?.jersey_number || '7'}</span>
+                <span>{video?.player_name} #{video?.jersey_number}</span>
               </div>
             </div>
           </div>
@@ -1037,7 +1037,7 @@ class VideoEditor extends Component {
               <User className="w-4 h-4" />
               View Player Identification Gallery
               <Badge variant="secondary" className="ml-2 bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-0">
-                {video?.sample_frames ? video.sample_frames.filter(f => f.annotation).length : '7'}/{video?.sample_frames ? video.sample_frames.length : '10'}
+                {video?.sample_frames?.filter(f => f.annotation).length || 0}/{video?.sample_frames?.length || 0}
               </Badge>
             </Button>
             {task && (
