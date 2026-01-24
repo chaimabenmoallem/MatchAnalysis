@@ -1,0 +1,40 @@
+POST https://629639da-920f-448d-a7c6-6128db114811-00-atu30qmz4xyz.janeway.replit.dev/api/videos 500 (Internal Server Error)
+apply @ injected.js:214
+create @ apiClient.jsx:19
+handleCreateTask @ UploadVideo.jsx:225
+callCallback2 @ chunk-276SZO74.js?v=6153a2c4:3674
+invokeGuardedCallbackDev @ chunk-276SZO74.js?v=6153a2c4:3699
+invokeGuardedCallback @ chunk-276SZO74.js?v=6153a2c4:3733
+invokeGuardedCallbackAndCatchFirstError @ chunk-276SZO74.js?v=6153a2c4:3736
+executeDispatch @ chunk-276SZO74.js?v=6153a2c4:7014
+processDispatchQueueItemsInOrder @ chunk-276SZO74.js?v=6153a2c4:7034
+processDispatchQueue @ chunk-276SZO74.js?v=6153a2c4:7043
+dispatchEventsForPlugins @ chunk-276SZO74.js?v=6153a2c4:7051
+(anonymous) @ chunk-276SZO74.js?v=6153a2c4:7174
+batchedUpdates$1 @ chunk-276SZO74.js?v=6153a2c4:18913
+batchedUpdates @ chunk-276SZO74.js?v=6153a2c4:3579
+dispatchEventForPluginEventSystem @ chunk-276SZO74.js?v=6153a2c4:7173
+dispatchEventWithEnableCapturePhaseSelectiveHydrationWithoutDiscreteEventReplay @ chunk-276SZO74.js?v=6153a2c4:5478
+dispatchEvent @ chunk-276SZO74.js?v=6153a2c4:5472
+dispatchDiscreteEvent @ chunk-276SZO74.js?v=6153a2c4:5449Understand this error
+injected.js:37 Error creating task: Error: Failed to create video
+    at Object.create (apiClient.jsx:24:29)
+    at async handleCreateTask (UploadVideo.jsx:225:21)
+(anonymous) @ injected.js:37
+handleCreateTask @ UploadVideo.jsx:237
+await in handleCreateTask
+callCallback2 @ chunk-276SZO74.js?v=6153a2c4:3674
+invokeGuardedCallbackDev @ chunk-276SZO74.js?v=6153a2c4:3699
+invokeGuardedCallback @ chunk-276SZO74.js?v=6153a2c4:3733
+invokeGuardedCallbackAndCatchFirstError @ chunk-276SZO74.js?v=6153a2c4:3736
+executeDispatch @ chunk-276SZO74.js?v=6153a2c4:7014
+processDispatchQueueItemsInOrder @ chunk-276SZO74.js?v=6153a2c4:7034
+processDispatchQueue @ chunk-276SZO74.js?v=6153a2c4:7043
+dispatchEventsForPlugins @ chunk-276SZO74.js?v=6153a2c4:7051
+(anonymous) @ chunk-276SZO74.js?v=6153a2c4:7174
+batchedUpdates$1 @ chunk-276SZO74.js?v=6153a2c4:18913
+batchedUpdates @ chunk-276SZO74.js?v=6153a2c4:3579
+dispatchEventForPluginEventSystem @ chunk-276SZO74.js?v=6153a2c4:7173
+dispatchEventWithEnableCapturePhaseSelectiveHydrationWithoutDiscreteEventReplay @ chunk-276SZO74.js?v=6153a2c4:5478
+dispatchEvent @ chunk-276SZO74.js?v=6153a2c4:5472
+dispatchDiscreteEvent @ chunk-276SZO74.js?v=6153a2c4:5449Understand this error
