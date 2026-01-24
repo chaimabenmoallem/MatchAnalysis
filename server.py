@@ -4,6 +4,7 @@ import cv2
 import base64
 import requests
 import tempfile
+import json
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from datetime import datetime
@@ -35,8 +36,9 @@ class Video(db.Model):
     away_team = db.Column(db.String(100))
     player_name = db.Column(db.String(100))
     jersey_number = db.Column(db.String(20))
+    sample_frames = db.Column(db.Text)
 
-    def __init__(self, id, title, url=None, status='pending', home_team=None, away_team=None, player_name=None, jersey_number=None):
+    def __init__(self, id, title, url=None, status='pending', home_team=None, away_team=None, player_name=None, jersey_number=None, sample_frames=None):
         self.id = id
         self.title = title
         self.url = url
@@ -45,6 +47,15 @@ class Video(db.Model):
         self.away_team = away_team
         self.player_name = player_name
         self.jersey_number = jersey_number
+        self.sample_frames = json.dumps(sample_frames) if sample_frames else None
+    
+    def get_sample_frames(self):
+        if self.sample_frames:
+            try:
+                return json.loads(self.sample_frames)
+            except:
+                return []
+        return []
 
 class ActionAnnotation(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -193,6 +204,7 @@ def get_videos():
         'away_team': v.away_team,
         'player_name': v.player_name,
         'jersey_number': v.jersey_number,
+        'sample_frames': v.get_sample_frames(),
         'created_at': v.created_at.isoformat()
     } for v in videos])
 
@@ -212,7 +224,8 @@ def create_video():
             home_team=data.get('home_team'),
             away_team=data.get('away_team'),
             player_name=data.get('player_name'),
-            jersey_number=data.get('jersey_number')
+            jersey_number=data.get('jersey_number'),
+            sample_frames=data.get('sample_frames')
         )
         db.session.add(video)
         db.session.commit()
@@ -220,7 +233,8 @@ def create_video():
             'id': video.id,
             'title': video.title,
             'url': video.url,
-            'status': video.status
+            'status': video.status,
+            'sample_frames': video.get_sample_frames()
         }), 201
     except Exception as e:
         db.session.rollback()
