@@ -1,0 +1,32 @@
+AnalystDashboard.jsx:437 Uncaught ReferenceError: Clock is not defined
+    at AnalystDashboard.jsx:437:28
+    at Array.map (<anonymous>)
+    at AnalystDashboard.jsx:415:28
+    at AnalystDashboard (AnalystDashboard.jsx:472:9)
+
+AnalystDashboard.jsx:437 Uncaught ReferenceError: Clock is not defined
+    at AnalystDashboard.jsx:437:28
+    at Array.map (<anonymous>)
+    at AnalystDashboard.jsx:415:28
+    at AnalystDashboard (AnalystDashboard.jsx:472:9)
+injected.js:37 The above error occurred in the <AnalystDashboard> component:
+
+    at AnalystDashboard (https://629639da-920f-448d-a7c6-6128db114811-00-atu30qmz4xyz.janeway.replit.dev/src/Pages/AnalystDashboard.jsx:76:20)
+    at RenderedRoute (https://629639da-920f-448d-a7c6-6128db114811-00-atu30qmz4xyz.janeway.replit.dev/node_modules/.vite/deps/react-router-dom.js?v=6153a2c4:4131:5)
+    at Routes (https://629639da-920f-448d-a7c6-6128db114811-00-atu30qmz4xyz.janeway.replit.dev/node_modules/.vite/deps/react-router-dom.js?v=6153a2c4:4601:5)
+    at main
+    at div
+    at div
+    at Layout (https://629639da-920f-448d-a7c6-6128db114811-00-atu30qmz4xyz.janeway.replit.dev/src/Components/Layout.jsx:31:5)
+    at QueryClientProvider (https://629639da-920f-448d-a7c6-6128db114811-00-atu30qmz4xyz.janeway.replit.dev/node_modules/.vite/deps/@tanstack_react-query.js?v=6153a2c4:3167:3)
+    at App
+    at Router (https://629639da-920f-448d-a7c6-6128db114811-00-atu30qmz4xyz.janeway.replit.dev/node_modules/.vite/deps/react-router-dom.js?v=6153a2c4:4544:15)
+    at BrowserRouter (https://629639da-920f-448d-a7c6-6128db114811-00-atu30qmz4xyz.janeway.replit.dev/node_modules/.vite/deps/react-router-dom.js?v=6153a2c4:5290:5)
+
+Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://reactjs.org/link/error-boundaries to learn more about error boundaries.
+chunk-276SZO74.js?v=6153a2c4:9129 Uncaught ReferenceError: Clock is not defined
+    at AnalystDashboard.jsx:437:28
+    at Array.map (<anonymous>)
+    at AnalystDashboard.jsx:415:28
+    at AnalystDashboard (AnalystDashboard.jsx:472:9)

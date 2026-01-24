@@ -30,7 +30,8 @@ import {
   Shield,
   Zap,
   Users,
-  Plus
+  Plus,
+  Clock
 } from 'lucide-react';
 import { Skeleton } from "../Components/ui/skeleton";
 import { motion, AnimatePresence } from 'framer-motion';
