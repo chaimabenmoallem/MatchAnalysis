@@ -31,7 +31,8 @@ import {
   Zap,
   Users,
   Plus,
-  Clock
+  Clock,
+  User
 } from 'lucide-react';
 import { Skeleton } from "../Components/ui/skeleton";
 import { motion, AnimatePresence } from 'framer-motion';
