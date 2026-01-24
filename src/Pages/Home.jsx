@@ -8,15 +8,11 @@ import { Badge } from "../Components/ui/badge";
 import { 
   Upload, 
   Video, 
-  ClipboardList, 
   BarChart3,
   Play,
-  CheckCircle2,
   Clock,
   ArrowRight,
-  TrendingUp,
-  Users,
-  Target
+  TrendingUp
 } from 'lucide-react';
 import { Skeleton } from "../Components/ui/skeleton";
 import { motion } from 'framer-motion';
@@ -82,10 +78,6 @@ export default class Home extends Component {
       );
     }
 
-    const myTasks = tasks.filter(t => t.assigned_to);
-    const pendingTasks = myTasks.filter(t => ['assigned', 'in_progress'].includes(t.status));
-    const completedTasks = myTasks.filter(t => t.status === 'completed');
-
     const quickActions = [
       { 
         title: 'Upload Video', 
@@ -93,13 +85,6 @@ export default class Home extends Component {
         icon: Upload, 
         href: createPageUrl('UploadVideo'),
         color: 'bg-emerald-500'
-      },
-      { 
-        title: 'My Tasks', 
-        description: `${pendingTasks.length} pending tasks`, 
-        icon: ClipboardList, 
-        href: createPageUrl('Tasks'),
-        color: 'bg-blue-500'
       },
       { 
         title: 'Video Editor', 
@@ -123,8 +108,8 @@ export default class Home extends Component {
       return (
         <div className="space-y-8">
           <Skeleton className="h-32 rounded-xl" />
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            {[1,2,3,4].map(i => <Skeleton key={i} className="h-32 rounded-xl" />)}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {[1,2,3].map(i => <Skeleton key={i} className="h-32 rounded-xl" />)}
           </div>
           <Skeleton className="h-64 rounded-xl" />
         </div>
@@ -153,25 +138,16 @@ export default class Home extends Component {
             <div className="flex flex-wrap gap-6">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 bg-white/10 rounded-xl flex items-center justify-center">
-                  <Clock className="w-6 h-6 text-amber-400" />
+                  <Video className="w-6 h-6 text-purple-400" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold">{pendingTasks.length}</p>
-                  <p className="text-sm text-slate-400">Pending Tasks</p>
+                  <p className="text-2xl font-bold">{videos.length}</p>
+                  <p className="text-sm text-slate-400">Videos</p>
                 </div>
               </div>
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 bg-white/10 rounded-xl flex items-center justify-center">
-                  <CheckCircle2 className="w-6 h-6 text-emerald-400" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold">{completedTasks.length}</p>
-                  <p className="text-sm text-slate-400">Completed</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-white/10 rounded-xl flex items-center justify-center">
-                  <Target className="w-6 h-6 text-blue-400" />
+                  <BarChart3 className="w-6 h-6 text-emerald-400" />
                 </div>
                 <div>
                   <p className="text-2xl font-bold">{annotations.length}</p>
@@ -183,7 +159,7 @@ export default class Home extends Component {
         </motion.div>
 
         {/* Quick Actions */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {quickActions.map((action, idx) => (
             <motion.div
               key={action.title}
@@ -255,64 +231,6 @@ export default class Home extends Component {
             </CardContent>
           </Card>
 
-          {/* My Tasks */}
-          <Card className="border-0 shadow-sm">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="flex items-center gap-2">
-                <ClipboardList className="w-5 h-5 text-emerald-500" />
-                My Tasks
-              </CardTitle>
-              <Link to={createPageUrl('Tasks')}>
-                <Button variant="ghost" size="sm" className="text-slate-500">
-                  View All <ArrowRight className="w-4 h-4 ml-1" />
-                </Button>
-              </Link>
-            </CardHeader>
-            <CardContent>
-              {pendingTasks.length === 0 ? (
-                <div className="text-center py-8">
-                  <CheckCircle2 className="w-12 h-12 mx-auto text-emerald-300 mb-3" />
-                  <p className="text-slate-500">No pending tasks</p>
-                  <p className="text-sm text-slate-400">You're all caught up!</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {pendingTasks.slice(0, 5).map(task => {
-                    const video = videos.find(v => v.id === task.video_id);
-                    return (
-                      <Link 
-                        key={task.id} 
-                        to={createPageUrl(task.task_type === 'video_processing' ? `VideoEditor?taskId=${task.id}` : `AnalystDashboard?taskId=${task.id}`)}
-                      >
-                        <div className="flex items-center gap-4 p-3 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors">
-                          <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${
-                            task.task_type === 'video_processing' ? 'bg-purple-100' : 'bg-amber-100'
-                          }`}>
-                            {task.task_type === 'video_processing' ? (
-                              <Video className="w-5 h-5 text-purple-600" />
-                            ) : (
-                              <BarChart3 className="w-5 h-5 text-amber-600" />
-                            )}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium text-slate-900 truncate">
-                              {video?.title || 'Video Task'}
-                            </p>
-                            <p className="text-sm text-slate-500">
-                              {task.task_type === 'video_processing' ? 'Video Processing' : 'Analyst Annotation'}
-                            </p>
-                          </div>
-                          <Badge className={task.status === 'in_progress' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}>
-                            {task.status?.replace(/_/g, ' ')}
-                          </Badge>
-                        </div>
-                      </Link>
-                    );
-                  })}
-                </div>
-              )}
-            </CardContent>
-          </Card>
         </div>
 
         {/* Stats Summary */}
