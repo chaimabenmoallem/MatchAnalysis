@@ -16,13 +16,10 @@ import {
   ArrowRight,
   TrendingUp,
   Users,
-  Target,
-  User,
-  MapPin
+  Target
 } from 'lucide-react';
 import { Skeleton } from "../Components/ui/skeleton";
 import { motion } from 'framer-motion';
-import PlayerIdentificationGallery from '../Components/video/PlayerIdentificationGallery';
 
 export default class Home extends Component {
   constructor(props) {
@@ -33,9 +30,7 @@ export default class Home extends Component {
       annotations: [],
       tasksLoading: true,
       videosLoading: true,
-      annotationsLoading: true,
-      showGallery: false,
-      galleryVideo: null
+      annotationsLoading: true
     };
   }
 
@@ -284,49 +279,34 @@ export default class Home extends Component {
                 <div className="space-y-3">
                   {pendingTasks.slice(0, 5).map(task => {
                     const video = videos.find(v => v.id === task.video_id);
-                    const sampleFrames = video?.sample_frames || [];
-                    const annotatedCount = sampleFrames.filter(f => f.annotation).length;
-                    
                     return (
-                      <div key={task.id} className="flex items-center gap-4 p-3 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors">
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-slate-900 truncate">
-                            {video?.title || 'Video Task'}
-                          </p>
-                          <p className="text-sm text-slate-500">
-                            {video?.home_team} vs {video?.away_team} • {video?.player_name} #{video?.jersey_number}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {sampleFrames.length > 0 && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="gap-1"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                this.setState({ showGallery: true, galleryVideo: video });
-                              }}
-                            >
-                              <User className="w-4 h-4" />
-                              View Player Identification Gallery
-                              <span className="ml-1 px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded text-xs">
-                                {annotatedCount}/{sampleFrames.length}
-                              </span>
-                            </Button>
-                          )}
-                          <Link to={createPageUrl(task.task_type === 'video_processing' ? `VideoEditor?taskId=${task.id}` : `AnalystDashboard?taskId=${task.id}`)}>
-                            <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 gap-1">
-                              <MapPin className="w-4 h-4" />
-                              Open Tagging Dashboard
-                            </Button>
-                          </Link>
-                          <Badge className={task.status === 'in_progress' ? 'bg-purple-100 text-purple-700' : 'bg-amber-100 text-amber-700'}>
+                      <Link 
+                        key={task.id} 
+                        to={createPageUrl(task.task_type === 'video_processing' ? `VideoEditor?taskId=${task.id}` : `AnalystDashboard?taskId=${task.id}`)}
+                      >
+                        <div className="flex items-center gap-4 p-3 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors">
+                          <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${
+                            task.task_type === 'video_processing' ? 'bg-purple-100' : 'bg-amber-100'
+                          }`}>
+                            {task.task_type === 'video_processing' ? (
+                              <Video className="w-5 h-5 text-purple-600" />
+                            ) : (
+                              <BarChart3 className="w-5 h-5 text-amber-600" />
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-slate-900 truncate">
+                              {video?.title || 'Video Task'}
+                            </p>
+                            <p className="text-sm text-slate-500">
+                              {task.task_type === 'video_processing' ? 'Video Processing' : 'Analyst Annotation'}
+                            </p>
+                          </div>
+                          <Badge className={task.status === 'in_progress' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}>
                             {task.status?.replace(/_/g, ' ')}
                           </Badge>
                         </div>
-                      </div>
+                      </Link>
                     );
                   })}
                 </div>
@@ -372,15 +352,6 @@ export default class Home extends Component {
             </div>
           </CardContent>
         </Card>
-
-        {/* Player Identification Gallery */}
-        {this.state.showGallery && this.state.galleryVideo?.sample_frames && (
-          <PlayerIdentificationGallery
-            frames={this.state.galleryVideo.sample_frames}
-            playerName={this.state.galleryVideo.player_name}
-            onClose={() => this.setState({ showGallery: false, galleryVideo: null })}
-          />
-        )}
       </div>
     );
   }
