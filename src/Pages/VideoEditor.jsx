@@ -884,37 +884,38 @@ class VideoEditor extends Component {
                     className="border-0 shadow-sm hover:shadow-md transition-shadow cursor-pointer group"
                     onClick={() => navigate(createPageUrl('VideoEditor') + `?taskId=${task.id}`)}
                   >
-                    <CardHeader>
+                    <CardHeader className="pb-2">
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
-                          <CardTitle className="text-base group-hover:text-emerald-600 transition-colors">
+                          <CardTitle className="text-lg font-bold text-slate-900 group-hover:text-emerald-600 transition-colors">
                             {video?.title || 'Untitled Video'}
                           </CardTitle>
-                          <p className="text-sm text-slate-500 mt-1">
+                          <div className="text-sm text-slate-500 mt-1 flex items-center">
+                            <Clock className="w-3 h-3 mr-1" />
                             {new Date(task.created_at).toLocaleDateString()}
-                          </p>
+                          </div>
                         </div>
-                        <Badge className={statusColors[task.status]}>
+                        <Badge className={`${statusColors[task.status]} capitalize px-3 py-1`}>
                           {task.status.replace(/_/g, ' ')}
                         </Badge>
                       </div>
                     </CardHeader>
                     <CardContent>
-                      <div className="space-y-2 text-sm">
-                        {video?.home_team && video?.away_team && (
-                          <div className="flex items-center gap-2 text-slate-600">
-                            <Video className="w-4 h-4" />
-                            <span>{video.home_team} vs {video.away_team}</span>
-                          </div>
-                        )}
-                        {video?.player_name && (
-                          <div className="flex items-center gap-2 text-slate-600">
-                            <User className="w-4 h-4" />
-                            <span>{video.player_name}</span>
-                          </div>
-                        )}
+                      <div className="space-y-3">
+                        <div className="flex items-center text-slate-600 text-sm bg-slate-50 p-2 rounded-lg border border-slate-100">
+                          <Video className="w-4 h-4 mr-2 text-slate-400" />
+                          <span className="font-medium truncate">
+                            {video?.home_team && video?.away_team ? `${video.home_team} vs ${video.away_team}` : (video?.url?.split('/').pop() || 'Video file')}
+                          </span>
+                        </div>
+                        <div className="flex items-center text-slate-600 text-sm bg-slate-50 p-2 rounded-lg border border-slate-100">
+                          <User className="w-4 h-4 mr-2 text-slate-400" />
+                          <span className="font-medium">
+                            {video?.player_name || task.notes || 'No player assigned'}
+                          </span>
+                        </div>
                         {task.assigned_to && (
-                          <div className="flex items-center gap-2 text-slate-500 text-xs">
+                          <div className="flex items-center gap-2 text-slate-500 text-xs px-1">
                             <span>Assigned to: {task.assigned_to}</span>
                           </div>
                         )}
@@ -1008,49 +1009,38 @@ class VideoEditor extends Component {
         </Dialog>
 
         {/* Video Info Header */}
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-4">
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              onClick={() => navigate('/')}
-              className="text-slate-500"
-            >
-              <ChevronLeft className="w-4 h-4 mr-1" />
-              Back
-            </Button>
-            <div>
-              <h2 className="text-xl font-bold text-slate-900">{video?.title}</h2>
-              <div className="flex items-center gap-2 text-sm text-slate-500">
-                <span>{video?.home_team} vs {video?.away_team}</span>
-                <span>•</span>
-                <span>{video?.player_name} #{video?.jersey_number}</span>
-              </div>
-            </div>
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-xl font-bold text-slate-900">{video?.title}</h2>
+            <p className="text-slate-500">
+              {video?.home_team} vs {video?.away_team} • {video?.player_name} #{video?.jersey_number}
+            </p>
           </div>
           <div className="flex items-center gap-3">
-            <Button
-              onClick={() => this.setState({ showGallery: true })}
-              variant="outline"
-              className="gap-2 bg-white border-slate-200"
-            >
-              <User className="w-4 h-4" />
-              View Player Identification Gallery
-              <Badge variant="secondary" className="ml-2 bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-0">
-                {video?.sample_frames?.filter(f => f.annotation).length || 0}/{video?.sample_frames?.length || 0}
-              </Badge>
-            </Button>
+            {video?.sample_frames && video.sample_frames.length > 0 && (
+              <Button
+                onClick={() => this.setState({ showGallery: true })}
+                variant="outline"
+                className="gap-2"
+              >
+                <User className="w-4 h-4" />
+                View Player Identification Gallery
+                <span className="ml-1 px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded text-xs">
+                  {video.sample_frames.filter(f => f.annotation).length}/{video.sample_frames.length}
+                </span>
+              </Button>
+            )}
             {task && (
               <>
                 <Button 
                   onClick={() => this.setState({ showTaggingDialog: true })}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                  className="bg-emerald-600 hover:bg-emerald-700"
                 >
                   <MapPin className="w-4 h-4 mr-2" />
                   Open Tagging Dashboard
                 </Button>
-                <Badge className={task?.status === 'in_progress' ? 'bg-purple-100 text-purple-700' : 'bg-amber-100 text-amber-700 py-1.5 px-3 border-0'}>
-                  {task?.status?.replace(/_/g, ' ') || 'pending processing'}
+                <Badge className={task?.status === 'in_progress' ? 'bg-purple-100 text-purple-700' : 'bg-amber-100 text-amber-700'}>
+                  {task?.status?.replace(/_/g, ' ')}
                 </Badge>
               </>
             )}
