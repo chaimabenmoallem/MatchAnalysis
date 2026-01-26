@@ -190,7 +190,7 @@ export default class Home extends Component {
                 <Video className="w-5 h-5 text-emerald-500" />
                 Recent Videos
               </CardTitle>
-              <Link to={createPageUrl('VideoEditor')}>
+              <Link to={createPageUrl('Tasks')}>
                 <Button variant="ghost" size="sm" className="text-slate-500">
                   View All <ArrowRight className="w-4 h-4 ml-1" />
                 </Button>
@@ -216,11 +216,9 @@ export default class Home extends Component {
                         <Play className="w-5 h-5 text-slate-500" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium text-slate-900 truncate">
-                          {video.home_team || 'Home'} vs {video.away_team || 'Away'}
-                        </p>
+                        <p className="font-medium text-slate-900 truncate">{video.title}</p>
                         <p className="text-sm text-slate-500">
-                          {video.player_name && `${video.player_name} • `}{video.title}
+                          {video.player_name} • {video.home_team} vs {video.away_team}
                         </p>
                       </div>
                       <Badge variant="outline" className="capitalize">
