@@ -85,26 +85,15 @@ class UploadVideo extends Component {
 
     this.setState({ error: '', uploading: true, uploadProgress: 0 });
 
-    const progressInterval = setInterval(() => {
-      this.setState(prev => {
-        if (prev.uploadProgress >= 90) {
-          clearInterval(progressInterval);
-          return prev;
-        }
-        return { uploadProgress: prev.uploadProgress + 10 };
-      });
-    }, 200);
-
     try {
       const extension = file.name.split('.').pop()?.toLowerCase() || 'mp4';
       const uniqueId = Date.now() + '-' + Math.random().toString(36).substr(2, 9);
       const storagePath = `videos/${uniqueId}.${extension}`;
       
       const result = await storageService.uploadFile(file, storagePath, (progress) => {
-        this.setState({ uploadProgress: Math.max(progress, 50) });
+        this.setState({ uploadProgress: progress });
       });
       
-      clearInterval(progressInterval);
       this.setState({ uploadProgress: 100 });
 
       const formatMap = { mp4: 'mp4', mov: 'mov', avi: 'avi', mkv: 'mkv' };
@@ -133,7 +122,6 @@ class UploadVideo extends Component {
         }));
       }, 1000);
     } catch (err) {
-      clearInterval(progressInterval);
       console.error('Upload error:', err);
       this.setState({ error: `Upload failed: ${err.message}`, uploading: false });
     }
