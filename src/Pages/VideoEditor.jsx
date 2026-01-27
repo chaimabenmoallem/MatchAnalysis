@@ -732,14 +732,14 @@ class VideoEditor extends Component {
             </div>
             
             <script>
-              let selectedZone = 'defending';
-              let queuedSegments = [];
-              let allStarts = [];
-              let allEnds = [];
+              var selectedZone = 'defending';
+              var queuedSegments = [];
+              var allStarts = [];
+              var allEnds = [];
               
               function selectZone(zone, btn) {
                 selectedZone = zone;
-                document.querySelectorAll('.zone-btn').forEach(b => b.classList.remove('selected'));
+                document.querySelectorAll('.zone-btn').forEach(function(b) { b.classList.remove('selected'); });
                 btn.classList.add('selected');
                 document.getElementById('selected-zone').textContent = 'Zone: ' + zone;
                 if (window.opener && window.opener.setSelectedZoneFromPopup) {
@@ -753,36 +753,17 @@ class VideoEditor extends Component {
                 }
               }
               
-              function deletePair(startId, endId) {
-                if (window.opener && window.opener.deleteTagPairFromPopup) {
-                  window.opener.deleteTagPairFromPopup(startId, endId);
-                }
-                queuedSegments = queuedSegments.filter(s => s.startId !== startId);
-                renderQueued();
-              }
-              
-              function addToQueue(startId, endId, startTime, endTime, zone) {
-                if (queuedSegments.find(s => s.startId === startId)) return;
-                queuedSegments.push({ startId, endId, startTime, endTime, zone });
-                renderAll();
-              }
-              
-              function removeFromQueue(startId) {
-                queuedSegments = queuedSegments.filter(s => s.startId !== startId);
-                renderAll();
-              }
-              
               function formatTime(seconds) {
-                const h = Math.floor(seconds / 3600);
-                const m = Math.floor((seconds % 3600) / 60);
-                const s = Math.floor(seconds % 60);
+                var h = Math.floor(seconds / 3600);
+                var m = Math.floor((seconds % 3600) / 60);
+                var s = Math.floor(seconds % 60);
                 if (h > 0) return h.toString().padStart(2,'0') + ':' + m.toString().padStart(2,'0') + ':' + s.toString().padStart(2,'0');
                 return m.toString().padStart(2,'0') + ':' + s.toString().padStart(2,'0');
               }
               
               function renderQueued() {
-                const list = document.getElementById('queued-list');
-                const count = queuedSegments.length;
+                var list = document.getElementById('queued-list');
+                var count = queuedSegments.length;
                 document.getElementById('queued-count').textContent = count;
                 document.getElementById('confirm-count').textContent = count;
                 document.getElementById('confirm-btn').disabled = count === 0;
@@ -790,14 +771,17 @@ class VideoEditor extends Component {
                 if (count === 0) {
                   list.innerHTML = '<p style="color: #94a3b8; text-align: center; padding: 16px; font-size: 14px;">No segments queued yet</p>';
                 } else {
-                  list.innerHTML = queuedSegments.map((seg, idx) => 
-                    '<div class="queued-item">' +
-                      '<span style="color: #3b82f6; font-weight: 600;">●</span>' +
-                      '<span style="font-weight: 500;">#' + (idx + 1) + '</span>' +
-                      '<span>' + formatTime(seg.startTime) + ' - ' + formatTime(seg.endTime) + '</span>' +
-                      '<span class="zone-badge">' + (seg.zone || 'No zone') + '</span>' +
-                    '</div>'
-                  ).join('');
+                  var html = '';
+                  for (var i = 0; i < queuedSegments.length; i++) {
+                    var seg = queuedSegments[i];
+                    html += '<div class="queued-item">';
+                    html += '<span style="color: #3b82f6; font-weight: 600;">●</span>';
+                    html += '<span style="font-weight: 500;">#' + (i + 1) + '</span>';
+                    html += '<span>' + formatTime(seg.startTime) + ' - ' + formatTime(seg.endTime) + '</span>';
+                    html += '<span class="zone-badge">' + (seg.zone || 'No zone') + '</span>';
+                    html += '</div>';
+                  }
+                  list.innerHTML = html;
                 }
               }
               
@@ -807,24 +791,24 @@ class VideoEditor extends Component {
               }
               
               function renderSegments() {
-                const pairCount = Math.min(allStarts.length, allEnds.length);
+                var pairCount = Math.min(allStarts.length, allEnds.length);
                 document.getElementById('segment-count').textContent = pairCount;
-                const list = document.getElementById('segments-list');
+                var list = document.getElementById('segments-list');
                 
                 if (allStarts.length === 0 && allEnds.length === 0) {
                   list.innerHTML = '<p style="color: #94a3b8; text-align: center; padding: 32px 0; font-size: 14px;">No tags yet.<br/>Mark player involvement start and end times.</p>';
                   return;
                 }
                 
-                let html = '';
-                for (let idx = 0; idx < pairCount; idx++) {
-                  const start = allStarts[idx];
-                  const end = allEnds[idx];
-                  const isQueued = queuedSegments.find(s => s.startId === start.id);
-                  const startSec = start.timestamp / 1000;
-                  const endSec = end.timestamp / 1000;
+                var html = '';
+                for (var idx = 0; idx < pairCount; idx++) {
+                  var start = allStarts[idx];
+                  var end = allEnds[idx];
+                  var isQueued = queuedSegments.find(function(s) { return s.startId === start.id; });
+                  var startSec = start.timestamp / 1000;
+                  var endSec = end.timestamp / 1000;
                   
-                  html += '<div class="segment-item ' + (isQueued ? 'queued' : '') + '">';
+                  html += '<div class="segment-item ' + (isQueued ? 'queued' : '') + '" data-idx="' + idx + '">';
                   html += '  <div class="segment-row">';
                   html += '    <div class="segment-info">';
                   html += '      <div class="segment-number ' + (isQueued ? 'queued' : '') + '">' + (idx + 1) + '</div>';
@@ -833,20 +817,20 @@ class VideoEditor extends Component {
                   html += start.zone ? '<span class="zone-badge">' + start.zone + '</span>' : '';
                   html += '      </div>';
                   html += '    </div>';
-                  html += '    <button class="delete-btn" onclick="deletePair(\\'' + start.id + '\\', \\'' + end.id + '\\')">🗑️</button>';
+                  html += '    <button class="delete-btn" data-action="delete" data-idx="' + idx + '">🗑️</button>';
                   html += '  </div>';
                   
                   if (isQueued) {
                     html += '  <div class="ready-badge">⏱ Ready to confirm</div>';
                   } else {
-                    html += '  <button class="add-queue-btn" onclick="addToQueue(\\'' + start.id + '\\', \\'' + end.id + '\\', ' + startSec + ', ' + endSec + ', \\'' + (start.zone || '') + '\\')">+ Add to Queue</button>';
+                    html += '  <button class="add-queue-btn" data-action="add" data-idx="' + idx + '">+ Add to Queue</button>';
                   }
                   
                   html += '</div>';
                 }
                 
                 if (allStarts.length > allEnds.length) {
-                  const lastStart = allStarts[allStarts.length - 1];
+                  var lastStart = allStarts[allStarts.length - 1];
                   html += '<div class="segment-item" style="background: #fef3c7; border-color: #fbbf24;">';
                   html += '  <div class="segment-row">';
                   html += '    <div class="segment-info">';
@@ -869,8 +853,46 @@ class VideoEditor extends Component {
                   window.opener.confirmSegmentsFromPopup(queuedSegments);
                   queuedSegments = [];
                   renderQueued();
+                  renderSegments();
                 }
               }
+              
+              // Event delegation for dynamically created buttons
+              document.getElementById('segments-list').addEventListener('click', function(e) {
+                var btn = e.target.closest('[data-action]');
+                if (!btn) return;
+                
+                var action = btn.getAttribute('data-action');
+                var idx = parseInt(btn.getAttribute('data-idx'), 10);
+                
+                if (action === 'delete' && allStarts[idx] && allEnds[idx]) {
+                  var startId = allStarts[idx].id;
+                  var endId = allEnds[idx].id;
+                  if (window.opener && window.opener.deleteTagPairFromPopup) {
+                    window.opener.deleteTagPairFromPopup(startId, endId);
+                  }
+                  queuedSegments = queuedSegments.filter(function(s) { return s.startId !== startId; });
+                  renderQueued();
+                }
+                
+                if (action === 'add' && allStarts[idx] && allEnds[idx]) {
+                  var start = allStarts[idx];
+                  var end = allEnds[idx];
+                  var startSec = start.timestamp / 1000;
+                  var endSec = end.timestamp / 1000;
+                  
+                  if (!queuedSegments.find(function(s) { return s.startId === start.id; })) {
+                    queuedSegments.push({
+                      startId: start.id,
+                      endId: end.id,
+                      startTime: startSec,
+                      endTime: endSec,
+                      zone: start.zone || selectedZone
+                    });
+                    renderAll();
+                  }
+                }
+              });
               
               window.addEventListener('message', function(event) {
                 if (event.data.type === 'UPDATE_TIME') {
