@@ -770,25 +770,38 @@ class VideoEditor extends Component {
                 return m.toString().padStart(2,'0') + ':' + s.toString().padStart(2,'0');
               }
               
+              var confirmedSegments = [];
+              
               function renderQueued() {
                 var list = document.getElementById('queued-list');
-                var count = queuedSegments.length;
-                document.getElementById('queued-count').textContent = count;
-                document.getElementById('confirm-count').textContent = count;
-                document.getElementById('confirm-btn').disabled = count === 0;
+                var pendingCount = queuedSegments.filter(function(s) { return !s.confirmed; }).length;
+                var totalCount = queuedSegments.length;
+                document.getElementById('queued-count').textContent = totalCount;
+                document.getElementById('confirm-count').textContent = pendingCount;
+                document.getElementById('confirm-btn').disabled = pendingCount === 0;
                 
-                if (count === 0) {
+                if (totalCount === 0) {
                   list.innerHTML = '<p style="color: #94a3b8; text-align: center; padding: 16px; font-size: 14px;">No segments queued yet</p>';
                 } else {
                   var html = '';
                   for (var i = 0; i < queuedSegments.length; i++) {
                     var seg = queuedSegments[i];
-                    html += '<div class="queued-item">';
-                    html += '<span style="color: #3b82f6; font-weight: 600;">●</span>';
-                    html += '<span style="font-weight: 500;">#' + (i + 1) + '</span>';
-                    html += '<span>' + formatTime(seg.startTime) + ' - ' + formatTime(seg.endTime) + '</span>';
-                    html += '<span class="zone-badge">' + (seg.zone || 'No zone') + '</span>';
-                    html += '</div>';
+                    if (seg.confirmed) {
+                      html += '<div class="queued-item" style="background: #d1fae5; border: 1px solid #10b981;">';
+                      html += '<span style="color: #10b981; font-weight: 600;">✓</span>';
+                      html += '<span style="font-weight: 500;">#' + (i + 1) + '</span>';
+                      html += '<span>' + formatTime(seg.startTime) + ' - ' + formatTime(seg.endTime) + '</span>';
+                      html += '<span class="zone-badge" style="background: #10b981; color: white; border-color: #10b981;">' + (seg.zone || 'No zone') + '</span>';
+                      html += '<span style="color: #10b981; font-size: 12px; font-weight: 600;">Confirmed</span>';
+                      html += '</div>';
+                    } else {
+                      html += '<div class="queued-item">';
+                      html += '<span style="color: #3b82f6; font-weight: 600;">●</span>';
+                      html += '<span style="font-weight: 500;">#' + (i + 1) + '</span>';
+                      html += '<span>' + formatTime(seg.startTime) + ' - ' + formatTime(seg.endTime) + '</span>';
+                      html += '<span class="zone-badge">' + (seg.zone || 'No zone') + '</span>';
+                      html += '</div>';
+                    }
                   }
                   list.innerHTML = html;
                 }
@@ -857,10 +870,16 @@ class VideoEditor extends Component {
               }
               
               function confirmAll() {
-                if (queuedSegments.length === 0) return;
+                var pendingSegments = queuedSegments.filter(function(s) { return !s.confirmed; });
+                if (pendingSegments.length === 0) return;
                 if (window.opener && window.opener.confirmSegmentsFromPopup) {
-                  window.opener.confirmSegmentsFromPopup(queuedSegments);
-                  queuedSegments = [];
+                  window.opener.confirmSegmentsFromPopup(pendingSegments);
+                  // Mark all pending segments as confirmed
+                  for (var i = 0; i < queuedSegments.length; i++) {
+                    if (!queuedSegments[i].confirmed) {
+                      queuedSegments[i].confirmed = true;
+                    }
+                  }
                   renderQueued();
                   renderSegments();
                 }
