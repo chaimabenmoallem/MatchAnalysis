@@ -735,6 +735,7 @@ class VideoEditor extends Component {
             <script>
               var selectedZone = 'defending';
               var queuedSegments = [];
+              var queuedStartIds = {};  // Track queued IDs as object for fast lookup
               var allStarts = [];
               var allEnds = [];
               
@@ -805,7 +806,9 @@ class VideoEditor extends Component {
                 for (var idx = 0; idx < pairCount; idx++) {
                   var start = allStarts[idx];
                   var end = allEnds[idx];
-                  var isQueued = queuedSegments.find(function(s) { return s.startId === start.id; });
+                  // Use string ID for lookup to avoid type mismatch
+                  var startIdStr = String(start.id);
+                  var isQueued = queuedStartIds[startIdStr] === true;
                   var startSec = start.timestamp / 1000;
                   var endSec = end.timestamp / 1000;
                   
@@ -890,41 +893,40 @@ class VideoEditor extends Component {
                 if (action === 'delete' && allStarts[idx] && allEnds[idx]) {
                   var startId = allStarts[idx].id;
                   var endId = allEnds[idx].id;
+                  var startIdStr = String(startId);
                   console.log('Deleting pair:', startId, endId);
                   if (window.opener && window.opener.deleteTagPairFromPopup) {
                     window.opener.deleteTagPairFromPopup(startId, endId);
                   }
-                  queuedSegments = queuedSegments.filter(function(s) { return s.startId !== startId; });
+                  delete queuedStartIds[startIdStr];
+                  queuedSegments = queuedSegments.filter(function(s) { return String(s.startId) !== startIdStr; });
                   renderQueued();
                 }
                 
                 if (action === 'add' && allStarts[idx] && allEnds[idx]) {
                   var start = allStarts[idx];
                   var end = allEnds[idx];
+                  var startIdStr = String(start.id);
                   var startSec = start.timestamp / 1000;
                   var endSec = end.timestamp / 1000;
                   
-                  console.log('Adding to queue:', start.id, '->', end.id);
+                  console.log('Adding to queue:', start.id, '->', end.id, 'as string:', startIdStr);
                   
-                  var alreadyQueued = false;
-                  for (var i = 0; i < queuedSegments.length; i++) {
-                    if (queuedSegments[i].startId === start.id) {
-                      alreadyQueued = true;
-                      break;
-                    }
+                  if (queuedStartIds[startIdStr]) {
+                    console.log('Already queued, skipping');
+                    return;
                   }
                   
-                  if (!alreadyQueued) {
-                    queuedSegments.push({
-                      startId: start.id,
-                      endId: end.id,
-                      startTime: startSec,
-                      endTime: endSec,
-                      zone: start.zone || selectedZone
-                    });
-                    console.log('Queue now has', queuedSegments.length, 'items');
-                    renderAll();
-                  }
+                  queuedStartIds[startIdStr] = true;
+                  queuedSegments.push({
+                    startId: start.id,
+                    endId: end.id,
+                    startTime: startSec,
+                    endTime: endSec,
+                    zone: start.zone || selectedZone
+                  });
+                  console.log('Queue now has', queuedSegments.length, 'items, IDs:', Object.keys(queuedStartIds));
+                  renderAll();
                 }
               }, true);
               
