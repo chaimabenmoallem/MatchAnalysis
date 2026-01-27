@@ -84,7 +84,9 @@ class VideoSegment(db.Model):
     start_time = db.Column(db.Integer)
     end_time = db.Column(db.Integer)
     segment_type = db.Column(db.String(100))
+    zone = db.Column(db.String(50))
     description = db.Column(db.Text)
+    status = db.Column(db.String(50), default='pending')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 # Routes
@@ -145,6 +147,8 @@ def get_segments():
         'start_time': s.start_time,
         'end_time': s.end_time,
         'segment_type': s.segment_type,
+        'zone': s.zone,
+        'status': s.status,
         'description': s.description
     } for s in segments])
 
@@ -157,11 +161,13 @@ def create_segment():
             start_time=data.get('start_time'),
             end_time=data.get('end_time'),
             segment_type=data.get('segment_type'),
+            zone=data.get('zone'),
+            status=data.get('status', 'pending'),
             description=data.get('description')
         )
         db.session.add(segment)
         db.session.commit()
-        return jsonify({'id': segment.id}), 201
+        return jsonify({'id': segment.id, 'zone': segment.zone}), 201
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
@@ -181,6 +187,8 @@ def handle_segment(segment_id):
         if 'start_time' in data: segment.start_time = data['start_time']
         if 'end_time' in data: segment.end_time = data['end_time']
         if 'segment_type' in data: segment.segment_type = data['segment_type']
+        if 'zone' in data: segment.zone = data['zone']
+        if 'status' in data: segment.status = data['status']
         db.session.commit()
         return jsonify({'id': segment.id})
 
