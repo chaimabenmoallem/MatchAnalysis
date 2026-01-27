@@ -733,7 +733,7 @@ class VideoEditor extends Component {
                             </div>
                             <button class="delete-btn" onclick="window.opener.deleteTagPairFromPopup('\${start.id}', '\${end.id}')">🗑️</button>
                           </div>
-                          <button class="add-queue-btn" onclick="window.opener.addToQueueFromPopup('\${start.id}', '\${end.id}')">+ Add to Queue</button>
+                          <button class="add-queue-btn" onclick="console.log('Add to queue clicked', '\${start.id}', '\${end.id}'); if(window.opener && window.opener.addToQueueFromPopup) { window.opener.addToQueueFromPopup('\${start.id}', '\${end.id}'); } else { alert('Cannot communicate with main window'); }">+ Add to Queue</button>
                         </div>
                       \`;
                     }
