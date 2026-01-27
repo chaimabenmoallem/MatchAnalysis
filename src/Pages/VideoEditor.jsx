@@ -560,8 +560,20 @@ class VideoEditor extends Component {
                 border-radius: 8px;
                 margin-bottom: 8px;
                 display: flex;
-                justify-content: space-between;
+                flex-direction: column;
+                align-items: stretch;
+                gap: 0;
+              }
+              .segment-row {
+                display: flex;
                 align-items: center;
+                justify-content: space-between;
+                width: 100%;
+              }
+              .segment-info {
+                display: flex;
+                align-items: center;
+                gap: 12px;
               }
               .delete-btn {
                 background: transparent;
@@ -708,9 +720,9 @@ class VideoEditor extends Component {
                       const start = involvedStarts[idx];
                       const end = involvedEnds[idx];
                       html += \`
-                        <div class="segment-item" style="flex-direction: column; align-items: stretch;">
-                          <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
-                            <div style="display: flex; align-items: center; gap: 12px;">
+                        <div class="segment-item">
+                          <div class="segment-row">
+                            <div class="segment-info">
                               <div class="segment-number">\${idx + 1}</div>
                               <div>
                                 <p style="font-weight: 600; font-size: 14px; margin: 0;">
