@@ -92,6 +92,7 @@ class VideoEditor extends Component {
       showGallery: false,
       isPopupOpen: false,
       pendingSegments: [],
+      confirmedStartIds: {},  // Track confirmed segment IDs that persist across popup close/reopen
       
       // Filters
       searchTerm: '',
@@ -189,11 +190,17 @@ class VideoEditor extends Component {
     window.confirmSegmentsFromPopup = async (queuedSegments) => {
       try {
         console.log('Confirming segments from popup:', queuedSegments);
-        const { video, task } = this.state;
+        const { video, task, confirmedStartIds } = this.state;
+        
+        // Add all confirmed IDs to the state so they persist across popup close/reopen
+        const newConfirmedIds = { ...confirmedStartIds };
         
         for (const seg of queuedSegments) {
           const startTimeMs = Math.round(seg.startTime * 1000);
           const endTimeMs = Math.round(seg.endTime * 1000);
+          
+          // Mark this segment as confirmed in state
+          newConfirmedIds[String(seg.startId)] = true;
           
           await videoSegmentService.create({
             video_id: video?.id,
@@ -204,6 +211,9 @@ class VideoEditor extends Component {
             zone: seg.zone || this.state.selectedZone
           });
         }
+        
+        // Save confirmed IDs to state
+        this.setState({ confirmedStartIds: newConfirmedIds });
         
         // Reload segments (tags remain visible in popup)
         await this.loadSegments();
@@ -938,7 +948,15 @@ class VideoEditor extends Component {
                 if (event.data.type === 'UPDATE_SEGMENTS') {
                   var newStarts = event.data.involvedStarts || [];
                   var newEnds = event.data.involvedEnds || [];
+                  var confirmedIds = event.data.confirmedStartIds || {};
                   var newHash = JSON.stringify(newStarts.map(function(s){return s.id;})) + JSON.stringify(newEnds.map(function(e){return e.id;}));
+                  
+                  // Merge confirmed IDs from parent into our local queue
+                  for (var cid in confirmedIds) {
+                    if (confirmedIds[cid] && !queuedStartIds[cid]) {
+                      queuedStartIds[cid] = true;
+                    }
+                  }
                   
                   if (newHash !== lastDataHash) {
                     lastDataHash = newHash;
@@ -986,7 +1004,8 @@ class VideoEditor extends Component {
       this.popupWindowRef.current.postMessage({ 
         type: 'UPDATE_SEGMENTS', 
         involvedStarts: involvedStarts,
-        involvedEnds: involvedEnds
+        involvedEnds: involvedEnds,
+        confirmedStartIds: this.state.confirmedStartIds  // Send confirmed IDs to popup
       }, '*');
     }
   };
