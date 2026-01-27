@@ -171,12 +171,27 @@ class VideoEditor extends Component {
     window.handleConfirmFromPopup = () => {
       this.handleConfirmPlayerVideo();
     };
+
+    window.addToQueueFromPopup = async (startId, endId) => {
+      try {
+        const allTags = await videoTagService.filter({ video_id: this.state.video?.id });
+        const startTag = allTags.find(t => t.id === startId);
+        const endTag = allTags.find(t => t.id === endId);
+        
+        if (startTag && endTag) {
+          this.handleAddToQueue(startTag, endTag);
+        }
+      } catch (error) {
+        console.error('Add to queue error:', error);
+      }
+    };
   };
 
   cleanupPopupHandlers = () => {
     delete window.handleTagFromPopup;
     delete window.setSelectedZoneFromPopup;
     delete window.deleteTagPairFromPopup;
+    delete window.addToQueueFromPopup;
     delete window.handleConfirmFromPopup;
   };
 
@@ -567,6 +582,26 @@ class VideoEditor extends Component {
                 background: #fee2e2;
                 color: #dc2626;
               }
+              .add-queue-btn {
+                width: 100%;
+                margin-top: 8px;
+                padding: 8px 16px;
+                background: #3b82f6;
+                color: white;
+                border: none;
+                border-radius: 6px;
+                font-size: 14px;
+                font-weight: 500;
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 4px;
+                transition: background 0.2s;
+              }
+              .add-queue-btn:hover {
+                background: #2563eb;
+              }
               .segment-number {
                 width: 32px;
                 height: 32px;
@@ -673,17 +708,20 @@ class VideoEditor extends Component {
                       const start = involvedStarts[idx];
                       const end = involvedEnds[idx];
                       html += \`
-                        <div class="segment-item">
-                          <div style="display: flex; align-items: center; gap: 12px;">
-                            <div class="segment-number">\${idx + 1}</div>
-                            <div>
-                              <p style="font-weight: 600; font-size: 14px; margin: 0;">
-                                \${formatTime(start.timestamp / 1000)} - \${formatTime(end.timestamp / 1000)}
-                              </p>
-                              \${start.zone ? '<span class="zone-badge">' + start.zone + '</span>' : ''}
+                        <div class="segment-item" style="flex-direction: column; align-items: stretch;">
+                          <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+                            <div style="display: flex; align-items: center; gap: 12px;">
+                              <div class="segment-number">\${idx + 1}</div>
+                              <div>
+                                <p style="font-weight: 600; font-size: 14px; margin: 0;">
+                                  \${formatTime(start.timestamp / 1000)} - \${formatTime(end.timestamp / 1000)}
+                                </p>
+                                \${start.zone ? '<span class="zone-badge">' + start.zone + '</span>' : ''}
+                              </div>
                             </div>
+                            <button class="delete-btn" onclick="window.opener.deleteTagPairFromPopup('\${start.id}', '\${end.id}')">🗑️</button>
                           </div>
-                          <button class="delete-btn" onclick="window.opener.deleteTagPairFromPopup('\${start.id}', '\${end.id}')">🗑️</button>
+                          <button class="add-queue-btn" onclick="window.opener.addToQueueFromPopup('\${start.id}', '\${end.id}')">+ Add to Queue</button>
                         </div>
                       \`;
                     }
