@@ -185,6 +185,32 @@ class VideoEditor extends Component {
         console.error('Add to queue error:', error);
       }
     };
+
+    window.confirmSegmentsFromPopup = async (queuedSegments) => {
+      try {
+        console.log('Confirming segments from popup:', queuedSegments);
+        const { video, task } = this.state;
+        
+        for (const seg of queuedSegments) {
+          const startTimeMs = Math.round(seg.startTime * 1000);
+          const endTimeMs = Math.round(seg.endTime * 1000);
+          
+          await videoSegmentService.create({
+            video_id: video?.id,
+            start_time: startTimeMs,
+            end_time: endTimeMs,
+            segment_type: 'player_involvement',
+            status: 'pending',
+            zone: seg.zone || this.state.selectedZone
+          });
+        }
+        
+        await this.loadSegments();
+        console.log('All segments confirmed from popup');
+      } catch (error) {
+        console.error('Confirm segments error:', error);
+      }
+    };
   };
 
   cleanupPopupHandlers = () => {
@@ -192,6 +218,7 @@ class VideoEditor extends Component {
     delete window.setSelectedZoneFromPopup;
     delete window.deleteTagPairFromPopup;
     delete window.addToQueueFromPopup;
+    delete window.confirmSegmentsFromPopup;
     delete window.handleConfirmFromPopup;
   };
 
@@ -521,10 +548,6 @@ class VideoEditor extends Component {
                 font-size: 14px;
               }
               .zone-btn.selected { background: #10b981; color: white; border-color: #10b981; }
-              .zone-defending { background: #ef4444; }
-              .zone-midfield { background: #f59e0b; }
-              .zone-attacking { background: #10b981; }
-              .zone-transition { background: #a855f7; }
               .tag-btn { 
                 padding: 10px 16px; 
                 border: 2px solid #e2e8f0; 
@@ -539,30 +562,16 @@ class VideoEditor extends Component {
               .tag-btn:hover { background: #f8fafc; }
               .tag-btn.success { border-color: #10b981; color: #10b981; }
               .tag-btn.danger { border-color: #ef4444; color: #ef4444; }
-              input, textarea { 
-                width: 100%; 
-                padding: 8px 12px; 
-                border: 1px solid #e2e8f0; 
-                border-radius: 6px; 
-                font-size: 14px;
-              }
-              button.primary { 
-                background: #10b981; 
-                color: white; 
-                padding: 8px 16px; 
-                border: none; 
-                border-radius: 6px; 
-                cursor: pointer; 
-              }
               .segment-item {
                 padding: 12px;
-                background: #f8fafc;
                 border-radius: 8px;
                 margin-bottom: 8px;
-                display: flex;
-                flex-direction: column;
-                align-items: stretch;
-                gap: 0;
+                border: 2px solid #e2e8f0;
+                background: white;
+              }
+              .segment-item.queued {
+                border-color: #3b82f6;
+                background: #eff6ff;
               }
               .segment-row {
                 display: flex;
@@ -582,22 +591,15 @@ class VideoEditor extends Component {
                 padding: 8px;
                 border-radius: 6px;
                 cursor: pointer;
-                min-width: 36px;
-                height: 36px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
                 font-size: 16px;
-                flex-shrink: 0;
               }
               .delete-btn:hover {
                 background: #fee2e2;
-                color: #dc2626;
               }
               .add-queue-btn {
                 width: 100%;
                 margin-top: 8px;
-                padding: 8px 16px;
+                padding: 10px 16px;
                 background: #3b82f6;
                 color: white;
                 border: none;
@@ -605,11 +607,6 @@ class VideoEditor extends Component {
                 font-size: 14px;
                 font-weight: 500;
                 cursor: pointer;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                gap: 4px;
-                transition: background 0.2s;
               }
               .add-queue-btn:hover {
                 background: #2563eb;
@@ -626,6 +623,10 @@ class VideoEditor extends Component {
                 font-weight: 600;
                 font-size: 14px;
               }
+              .segment-number.queued {
+                background: #3b82f6;
+                color: white;
+              }
               .zone-badge {
                 display: inline-block;
                 padding: 2px 8px;
@@ -637,127 +638,254 @@ class VideoEditor extends Component {
                 color: #6b7280;
                 text-transform: capitalize;
               }
+              .ready-badge {
+                display: flex;
+                align-items: center;
+                gap: 4px;
+                color: #3b82f6;
+                font-size: 13px;
+                margin-top: 8px;
+              }
+              .queued-section {
+                margin-top: 20px;
+                padding: 16px;
+                background: #f8fafc;
+                border-radius: 8px;
+              }
+              .queued-item {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                padding: 8px 12px;
+                background: white;
+                border-radius: 6px;
+                margin-bottom: 6px;
+                font-size: 14px;
+              }
+              .confirm-btn {
+                width: 100%;
+                margin-top: 16px;
+                padding: 14px;
+                background: #059669;
+                color: white;
+                border: none;
+                border-radius: 8px;
+                font-size: 15px;
+                font-weight: 600;
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 8px;
+              }
+              .confirm-btn:hover {
+                background: #047857;
+              }
+              .confirm-btn:disabled {
+                background: #94a3b8;
+                cursor: not-allowed;
+              }
             </style>
           </head>
           <body>
-            <h2>Quick Tagging Dashboard</h2>
+            <h2 style="margin-bottom: 8px;">Quick Tagging Dashboard</h2>
             <p style="color: #64748b; margin-bottom: 20px;">Use this window for tagging while watching the video in the main window</p>
+            
             <div style="margin-bottom: 20px;">
-              <p style="font-weight: 600; margin-bottom: 8px;">Current Time: <span id="current-time">--:--</span></p>
+              <p style="font-weight: 600; margin-bottom: 4px;">Current Time: <span id="current-time">00:00</span></p>
               <p style="color: #64748b; font-size: 14px;">Synced with video player</p>
             </div>
+            
             <div style="margin-bottom: 20px;">
               <strong style="display: block; margin-bottom: 8px;">Field Zone</strong>
               <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;">
-                <button class="zone-btn" onclick="window.selectZone('defending')">Defending</button>
-                <button class="zone-btn" onclick="window.selectZone('midfield')">Midfield</button>
-                <button class="zone-btn" onclick="window.selectZone('attacking')">Attacking</button>
-                <button class="zone-btn" onclick="window.selectZone('transition')">Transition</button>
+                <button class="zone-btn" onclick="selectZone('defending', this)">Defending</button>
+                <button class="zone-btn" onclick="selectZone('midfield', this)">Midfield</button>
+                <button class="zone-btn" onclick="selectZone('attacking', this)">Attacking</button>
+                <button class="zone-btn" onclick="selectZone('transition', this)">Transition</button>
               </div>
               <p id="selected-zone" style="margin-top: 8px; color: #64748b; font-size: 14px;">No zone selected</p>
             </div>
+            
             <div style="margin-bottom: 20px;">
               <strong style="display: block; margin-bottom: 8px;">Player Involvement</strong>
               <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;">
-                <button class="tag-btn success" onclick="window.opener.handleTagFromPopup('involved_start')">▶ Start</button>
-                <button class="tag-btn danger" onclick="window.opener.handleTagFromPopup('involved_end')">⏸ End</button>
+                <button class="tag-btn success" onclick="handleTag('involved_start')">▶ Start</button>
+                <button class="tag-btn danger" onclick="handleTag('involved_end')">⏸ End</button>
               </div>
             </div>
+            
             <div>
               <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
                 <strong>Tagged Pairs (<span id="segment-count">0</span>)</strong>
                 <span style="color: #10b981;">✂</span>
               </div>
-              <div id="segments-list" style="max-height: 400px; overflow-y: auto;"></div>
+              <div id="segments-list" style="max-height: 300px; overflow-y: auto;"></div>
             </div>
-            <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #e2e8f0;">
-              <p style="font-size: 12px; color: #64748b; margin-bottom: 8px;">
-                <span id="segment-created-count">0</span> segments created
-              </p>
-              <button class="primary" style="width: 100%; padding: 12px; font-size: 16px;" onclick="window.opener.handleConfirmFromPopup()">
-                ✓ Confirm All & Create Analyst Task
+            
+            <div class="queued-section">
+              <p style="font-weight: 600; margin-bottom: 12px;">Queued Segments (<span id="queued-count">0</span>)</p>
+              <div id="queued-list"></div>
+              <button class="confirm-btn" id="confirm-btn" onclick="confirmAll()" disabled>
+                ⏱ Confirm All & Create Analyst Task (<span id="confirm-count">0</span>)
               </button>
             </div>
+            
             <script>
-              let selectedZone = null;
-
-              window.selectZone = function(zone) {
+              let selectedZone = 'defending';
+              let queuedSegments = [];
+              let allStarts = [];
+              let allEnds = [];
+              
+              function selectZone(zone, btn) {
                 selectedZone = zone;
                 document.querySelectorAll('.zone-btn').forEach(b => b.classList.remove('selected'));
-                event.target.classList.add('selected');
+                btn.classList.add('selected');
                 document.getElementById('selected-zone').textContent = 'Zone: ' + zone;
                 if (window.opener && window.opener.setSelectedZoneFromPopup) {
                   window.opener.setSelectedZoneFromPopup(zone);
                 }
-              };
-
+              }
+              
+              function handleTag(tagType) {
+                if (window.opener && window.opener.handleTagFromPopup) {
+                  window.opener.handleTagFromPopup(tagType);
+                }
+              }
+              
+              function deletePair(startId, endId) {
+                if (window.opener && window.opener.deleteTagPairFromPopup) {
+                  window.opener.deleteTagPairFromPopup(startId, endId);
+                }
+                queuedSegments = queuedSegments.filter(s => s.startId !== startId);
+                renderQueued();
+              }
+              
+              function addToQueue(startId, endId, startTime, endTime, zone) {
+                if (queuedSegments.find(s => s.startId === startId)) return;
+                queuedSegments.push({ startId, endId, startTime, endTime, zone });
+                renderAll();
+              }
+              
+              function removeFromQueue(startId) {
+                queuedSegments = queuedSegments.filter(s => s.startId !== startId);
+                renderAll();
+              }
+              
+              function formatTime(seconds) {
+                const h = Math.floor(seconds / 3600);
+                const m = Math.floor((seconds % 3600) / 60);
+                const s = Math.floor(seconds % 60);
+                if (h > 0) return h.toString().padStart(2,'0') + ':' + m.toString().padStart(2,'0') + ':' + s.toString().padStart(2,'0');
+                return m.toString().padStart(2,'0') + ':' + s.toString().padStart(2,'0');
+              }
+              
+              function renderQueued() {
+                const list = document.getElementById('queued-list');
+                const count = queuedSegments.length;
+                document.getElementById('queued-count').textContent = count;
+                document.getElementById('confirm-count').textContent = count;
+                document.getElementById('confirm-btn').disabled = count === 0;
+                
+                if (count === 0) {
+                  list.innerHTML = '<p style="color: #94a3b8; text-align: center; padding: 16px; font-size: 14px;">No segments queued yet</p>';
+                } else {
+                  list.innerHTML = queuedSegments.map((seg, idx) => 
+                    '<div class="queued-item">' +
+                      '<span style="color: #3b82f6; font-weight: 600;">●</span>' +
+                      '<span style="font-weight: 500;">#' + (idx + 1) + '</span>' +
+                      '<span>' + formatTime(seg.startTime) + ' - ' + formatTime(seg.endTime) + '</span>' +
+                      '<span class="zone-badge">' + (seg.zone || 'No zone') + '</span>' +
+                    '</div>'
+                  ).join('');
+                }
+              }
+              
+              function renderAll() {
+                renderSegments();
+                renderQueued();
+              }
+              
+              function renderSegments() {
+                const pairCount = Math.min(allStarts.length, allEnds.length);
+                document.getElementById('segment-count').textContent = pairCount;
+                const list = document.getElementById('segments-list');
+                
+                if (allStarts.length === 0 && allEnds.length === 0) {
+                  list.innerHTML = '<p style="color: #94a3b8; text-align: center; padding: 32px 0; font-size: 14px;">No tags yet.<br/>Mark player involvement start and end times.</p>';
+                  return;
+                }
+                
+                let html = '';
+                for (let idx = 0; idx < pairCount; idx++) {
+                  const start = allStarts[idx];
+                  const end = allEnds[idx];
+                  const isQueued = queuedSegments.find(s => s.startId === start.id);
+                  const startSec = start.timestamp / 1000;
+                  const endSec = end.timestamp / 1000;
+                  
+                  html += '<div class="segment-item ' + (isQueued ? 'queued' : '') + '">';
+                  html += '  <div class="segment-row">';
+                  html += '    <div class="segment-info">';
+                  html += '      <div class="segment-number ' + (isQueued ? 'queued' : '') + '">' + (idx + 1) + '</div>';
+                  html += '      <div>';
+                  html += '        <p style="font-weight: 600; font-size: 14px; margin: 0;">' + formatTime(startSec) + ' - ' + formatTime(endSec) + '</p>';
+                  html += start.zone ? '<span class="zone-badge">' + start.zone + '</span>' : '';
+                  html += '      </div>';
+                  html += '    </div>';
+                  html += '    <button class="delete-btn" onclick="deletePair(\\'' + start.id + '\\', \\'' + end.id + '\\')">🗑️</button>';
+                  html += '  </div>';
+                  
+                  if (isQueued) {
+                    html += '  <div class="ready-badge">⏱ Ready to confirm</div>';
+                  } else {
+                    html += '  <button class="add-queue-btn" onclick="addToQueue(\\'' + start.id + '\\', \\'' + end.id + '\\', ' + startSec + ', ' + endSec + ', \\'' + (start.zone || '') + '\\')">+ Add to Queue</button>';
+                  }
+                  
+                  html += '</div>';
+                }
+                
+                if (allStarts.length > allEnds.length) {
+                  const lastStart = allStarts[allStarts.length - 1];
+                  html += '<div class="segment-item" style="background: #fef3c7; border-color: #fbbf24;">';
+                  html += '  <div class="segment-row">';
+                  html += '    <div class="segment-info">';
+                  html += '      <div class="segment-number" style="background: #fef3c7; color: #92400e; border: 2px solid #fbbf24;">' + (pairCount + 1) + '</div>';
+                  html += '      <div>';
+                  html += '        <p style="font-weight: 600; font-size: 14px; margin: 0; color: #92400e;">' + formatTime(lastStart.timestamp / 1000) + ' - <em>Waiting for End</em></p>';
+                  html += lastStart.zone ? '<span class="zone-badge" style="background: #fef3c7; color: #92400e;">' + lastStart.zone + '</span>' : '';
+                  html += '      </div>';
+                  html += '    </div>';
+                  html += '  </div>';
+                  html += '</div>';
+                }
+                
+                list.innerHTML = html;
+              }
+              
+              function confirmAll() {
+                if (queuedSegments.length === 0) return;
+                if (window.opener && window.opener.confirmSegmentsFromPopup) {
+                  window.opener.confirmSegmentsFromPopup(queuedSegments);
+                  queuedSegments = [];
+                  renderQueued();
+                }
+              }
+              
               window.addEventListener('message', function(event) {
                 if (event.data.type === 'UPDATE_TIME') {
                   const time = event.data.time;
-                  const m = Math.floor(time / 60);
-                  const s = Math.floor(time % 60);
-                  document.getElementById('current-time').textContent = 
-                    m.toString().padStart(2, '0') + ':' + s.toString().padStart(2, '0');
+                  document.getElementById('current-time').textContent = formatTime(time);
                 }
                 if (event.data.type === 'UPDATE_SEGMENTS') {
-                  const involvedStarts = event.data.involvedStarts || [];
-                  const involvedEnds = event.data.involvedEnds || [];
-                  const pairCount = Math.min(involvedStarts.length, involvedEnds.length);
-                  const segmentsCreated = event.data.segmentsCreated || 0;
-                  document.getElementById('segment-count').textContent = pairCount;
-                  document.getElementById('segment-created-count').textContent = segmentsCreated;
-                  const list = document.getElementById('segments-list');
-                  if (involvedStarts.length === 0 && involvedEnds.length === 0) {
-                    list.innerHTML = '<p style="color: #94a3b8; text-align: center; padding: 32px 0; font-size: 14px;">No tags yet.<br/>Mark player involvement start and end times.</p>';
-                  } else {
-                    const formatTime = (s) => {
-                      const m = Math.floor(s / 60);
-                      const sec = Math.floor(s % 60);
-                      return m.toString().padStart(2, '0') + ':' + sec.toString().padStart(2, '0');
-                    };
-                    let html = '';
-                    for (let idx = 0; idx < pairCount; idx++) {
-                      const start = involvedStarts[idx];
-                      const end = involvedEnds[idx];
-                      html += \`
-                        <div class="segment-item">
-                          <div class="segment-row">
-                            <div class="segment-info">
-                              <div class="segment-number">\${idx + 1}</div>
-                              <div>
-                                <p style="font-weight: 600; font-size: 14px; margin: 0;">
-                                  \${formatTime(start.timestamp / 1000)} - \${formatTime(end.timestamp / 1000)}
-                                </p>
-                                \${start.zone ? '<span class="zone-badge">' + start.zone + '</span>' : ''}
-                              </div>
-                            </div>
-                            <button class="delete-btn" onclick="window.opener.deleteTagPairFromPopup('\${start.id}', '\${end.id}')">🗑️</button>
-                          </div>
-                          <button class="add-queue-btn" onclick="console.log('Add to queue clicked', '\${start.id}', '\${end.id}'); if(window.opener && window.opener.addToQueueFromPopup) { window.opener.addToQueueFromPopup('\${start.id}', '\${end.id}'); } else { alert('Cannot communicate with main window'); }">+ Add to Queue</button>
-                        </div>
-                      \`;
-                    }
-                    if (involvedStarts.length > involvedEnds.length) {
-                      const lastStart = involvedStarts[involvedStarts.length - 1];
-                      html += \`
-                        <div class="segment-item" style="background: #fef3c7; border: 1px solid #fbbf24;">
-                          <div style="display: flex; align-items: center; gap: 12px;">
-                            <div class="segment-number" style="background: #fef3c7; color: #92400e; border: 2px solid #fbbf24;">\${pairCount + 1}</div>
-                            <div>
-                              <p style="font-weight: 600; font-size: 14px; margin: 0; color: #92400e;">
-                                \${formatTime(lastStart.timestamp / 1000)} - <span style="font-style: italic;">Waiting for End</span>
-                              </p>
-                              \${lastStart.zone ? '<span class="zone-badge" style="background: #fef3c7; color: #92400e; border-color: #fbbf24;">' + lastStart.zone + '</span>' : ''}
-                            </div>
-                          </div>
-                          <div style="width: 8px; height: 8px; background: #f59e0b; border-radius: 50%; animation: pulse 2s infinite;"></div>
-                        </div>
-                      \`;
-                    }
-                    list.innerHTML = html;
-                  }
+                  allStarts = event.data.involvedStarts || [];
+                  allEnds = event.data.involvedEnds || [];
+                  renderAll();
                 }
               });
+              
+              // Initialize
+              renderQueued();
             </script>
           </body>
         </html>
