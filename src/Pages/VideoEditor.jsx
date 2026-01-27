@@ -678,7 +678,7 @@ class VideoEditor extends Component {
                             <div class="segment-number">\${idx + 1}</div>
                             <div>
                               <p style="font-weight: 600; font-size: 14px; margin: 0;">
-                                \${formatTime(start.timestamp)} - \${formatTime(end.timestamp)}
+                                \${formatTime(start.timestamp / 1000)} - \${formatTime(end.timestamp / 1000)}
                               </p>
                               \${start.zone ? '<span class="zone-badge">' + start.zone + '</span>' : ''}
                             </div>
@@ -695,7 +695,7 @@ class VideoEditor extends Component {
                             <div class="segment-number" style="background: #fef3c7; color: #92400e; border: 2px solid #fbbf24;">\${pairCount + 1}</div>
                             <div>
                               <p style="font-weight: 600; font-size: 14px; margin: 0; color: #92400e;">
-                                \${formatTime(lastStart.timestamp)} - <span style="font-style: italic;">Waiting for End</span>
+                                \${formatTime(lastStart.timestamp / 1000)} - <span style="font-style: italic;">Waiting for End</span>
                               </p>
                               \${lastStart.zone ? '<span class="zone-badge" style="background: #fef3c7; color: #92400e; border-color: #fbbf24;">' + lastStart.zone + '</span>' : ''}
                             </div>
