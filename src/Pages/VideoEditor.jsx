@@ -203,9 +203,18 @@ class VideoEditor extends Component {
             status: 'pending',
             zone: seg.zone || this.state.selectedZone
           });
+          
+          // Delete the original tags after creating the segment
+          try {
+            await videoTagService.delete(seg.startId);
+            await videoTagService.delete(seg.endId);
+          } catch (deleteError) {
+            console.log('Tag already deleted or not found:', deleteError);
+          }
         }
         
-        await this.loadSegments();
+        // Reload both tags and segments
+        await this.loadData();
         console.log('All segments confirmed from popup');
       } catch (error) {
         console.error('Confirm segments error:', error);
