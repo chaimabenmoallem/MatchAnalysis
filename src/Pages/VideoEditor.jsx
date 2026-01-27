@@ -203,18 +203,10 @@ class VideoEditor extends Component {
             status: 'pending',
             zone: seg.zone || this.state.selectedZone
           });
-          
-          // Delete the original tags after creating the segment
-          try {
-            await videoTagService.delete(seg.startId);
-            await videoTagService.delete(seg.endId);
-          } catch (deleteError) {
-            console.log('Tag already deleted or not found:', deleteError);
-          }
         }
         
-        // Reload both tags and segments
-        await this.loadData();
+        // Reload segments (tags remain visible in popup)
+        await this.loadSegments();
         console.log('All segments confirmed from popup');
       } catch (error) {
         console.error('Confirm segments error:', error);
@@ -860,9 +852,11 @@ class VideoEditor extends Component {
                 if (queuedSegments.length === 0) return;
                 if (window.opener && window.opener.confirmSegmentsFromPopup) {
                   window.opener.confirmSegmentsFromPopup(queuedSegments);
-                  queuedSegments = [];
-                  renderQueued();
-                  renderSegments();
+                  // Keep items showing as "Ready to confirm" - don't clear the queue
+                  // Just update the queued section to show "Confirmed"
+                  document.getElementById('confirm-btn').textContent = '✓ Confirmed!';
+                  document.getElementById('confirm-btn').disabled = true;
+                  document.getElementById('confirm-btn').style.background = '#10b981';
                 }
               }
               
