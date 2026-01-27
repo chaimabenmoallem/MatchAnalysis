@@ -857,17 +857,37 @@ class VideoEditor extends Component {
                 }
               }
               
+              // Debounce render to prevent click interruption
+              var renderTimeout = null;
+              var lastDataHash = '';
+              
+              function scheduleRender() {
+                if (renderTimeout) clearTimeout(renderTimeout);
+                renderTimeout = setTimeout(function() {
+                  renderAll();
+                }, 100);
+              }
+              
               // Event delegation for dynamically created buttons
               document.getElementById('segments-list').addEventListener('click', function(e) {
-                var btn = e.target.closest('[data-action]');
+                e.preventDefault();
+                e.stopPropagation();
+                
+                var btn = e.target;
+                if (!btn.hasAttribute('data-action')) {
+                  btn = btn.closest('[data-action]');
+                }
                 if (!btn) return;
                 
                 var action = btn.getAttribute('data-action');
                 var idx = parseInt(btn.getAttribute('data-idx'), 10);
                 
+                console.log('Button clicked:', action, 'idx:', idx);
+                
                 if (action === 'delete' && allStarts[idx] && allEnds[idx]) {
                   var startId = allStarts[idx].id;
                   var endId = allEnds[idx].id;
+                  console.log('Deleting pair:', startId, endId);
                   if (window.opener && window.opener.deleteTagPairFromPopup) {
                     window.opener.deleteTagPairFromPopup(startId, endId);
                   }
@@ -881,7 +901,17 @@ class VideoEditor extends Component {
                   var startSec = start.timestamp / 1000;
                   var endSec = end.timestamp / 1000;
                   
-                  if (!queuedSegments.find(function(s) { return s.startId === start.id; })) {
+                  console.log('Adding to queue:', start.id, '->', end.id);
+                  
+                  var alreadyQueued = false;
+                  for (var i = 0; i < queuedSegments.length; i++) {
+                    if (queuedSegments[i].startId === start.id) {
+                      alreadyQueued = true;
+                      break;
+                    }
+                  }
+                  
+                  if (!alreadyQueued) {
                     queuedSegments.push({
                       startId: start.id,
                       endId: end.id,
@@ -889,20 +919,28 @@ class VideoEditor extends Component {
                       endTime: endSec,
                       zone: start.zone || selectedZone
                     });
+                    console.log('Queue now has', queuedSegments.length, 'items');
                     renderAll();
                   }
                 }
-              });
+              }, true);
               
               window.addEventListener('message', function(event) {
                 if (event.data.type === 'UPDATE_TIME') {
-                  const time = event.data.time;
+                  var time = event.data.time;
                   document.getElementById('current-time').textContent = formatTime(time);
                 }
                 if (event.data.type === 'UPDATE_SEGMENTS') {
-                  allStarts = event.data.involvedStarts || [];
-                  allEnds = event.data.involvedEnds || [];
-                  renderAll();
+                  var newStarts = event.data.involvedStarts || [];
+                  var newEnds = event.data.involvedEnds || [];
+                  var newHash = JSON.stringify(newStarts.map(function(s){return s.id;})) + JSON.stringify(newEnds.map(function(e){return e.id;}));
+                  
+                  if (newHash !== lastDataHash) {
+                    lastDataHash = newHash;
+                    allStarts = newStarts;
+                    allEnds = newEnds;
+                    scheduleRender();
+                  }
                 }
               });
               
