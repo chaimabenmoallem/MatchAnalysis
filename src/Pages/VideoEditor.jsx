@@ -146,24 +146,36 @@ class VideoEditor extends Component {
         const endTag = allTags.find(t => t.id === endId);
         
         if (startTag && endTag) {
-          // Convert timestamps from milliseconds to seconds for comparison
-          const startTimeSeconds = startTag.timestamp / 1000;
-          const endTimeSeconds = endTag.timestamp / 1000;
+          // Both timestamps are in milliseconds - compare directly
+          const startTimeMs = startTag.timestamp;
+          const endTimeMs = endTag.timestamp;
           
+          // Find and delete matching segment (with 500ms tolerance)
           const matchingSegment = allSegments.find(seg => 
-            Math.abs(seg.start_time - startTimeSeconds) < 0.5 && 
-            Math.abs(seg.end_time - endTimeSeconds) < 0.5
+            Math.abs(seg.start_time - startTimeMs) < 500 && 
+            Math.abs(seg.end_time - endTimeMs) < 500
           );
           if (matchingSegment) {
+            console.log('Deleting segment:', matchingSegment.id);
             await videoSegmentService.delete(matchingSegment.id).catch(() => {});
           }
         }
 
+        // Delete the tags
         await videoTagService.delete(startId).catch(() => {});
         await videoTagService.delete(endId).catch(() => {});
 
-        this.loadTags();
-        this.loadSegments();
+        // Remove from confirmed IDs state
+        const newConfirmedIds = { ...this.state.confirmedStartIds };
+        delete newConfirmedIds[String(startId)];
+        this.setState({ confirmedStartIds: newConfirmedIds });
+
+        // Reload data to update UI
+        await this.loadTags();
+        await this.loadSegments();
+        
+        // Update popup with new data
+        this.updatePopupSegments();
       } catch (error) {
         console.error('Delete error:', error);
       }
