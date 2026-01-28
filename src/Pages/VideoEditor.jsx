@@ -187,6 +187,12 @@ class VideoEditor extends Component {
       }
     };
 
+    // Handler for popup to request initial data
+    window.requestPopupUpdate = () => {
+      console.log('Popup requested update');
+      this.updatePopupSegments();
+    };
+
     window.confirmSegmentsFromPopup = async (queuedSegments) => {
       try {
         console.log('Confirming segments from popup:', queuedSegments);
@@ -231,6 +237,7 @@ class VideoEditor extends Component {
     delete window.addToQueueFromPopup;
     delete window.confirmSegmentsFromPopup;
     delete window.handleConfirmFromPopup;
+    delete window.requestPopupUpdate;
   };
 
   loadData = async () => {
@@ -952,13 +959,16 @@ class VideoEditor extends Component {
                   var newHash = JSON.stringify(newStarts.map(function(s){return s.id;})) + JSON.stringify(newEnds.map(function(e){return e.id;}));
                   
                   // Merge confirmed IDs from parent into our local queue
+                  var hasNewConfirmed = false;
                   for (var cid in confirmedIds) {
                     if (confirmedIds[cid] && !queuedStartIds[cid]) {
                       queuedStartIds[cid] = true;
+                      hasNewConfirmed = true;
                     }
                   }
                   
-                  if (newHash !== lastDataHash) {
+                  // Update data and re-render if segments changed OR if we got new confirmed IDs
+                  if (newHash !== lastDataHash || hasNewConfirmed) {
                     lastDataHash = newHash;
                     allStarts = newStarts;
                     allEnds = newEnds;
@@ -969,6 +979,13 @@ class VideoEditor extends Component {
               
               // Initialize
               renderQueued();
+              
+              // Request initial data from parent after a small delay to ensure listener is ready
+              setTimeout(function() {
+                if (window.opener && window.opener.requestPopupUpdate) {
+                  window.opener.requestPopupUpdate();
+                }
+              }, 100);
             </script>
           </body>
         </html>
