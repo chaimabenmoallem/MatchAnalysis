@@ -1773,10 +1773,21 @@ class VideoEditor extends Component {
               </div>
             ) : (
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-                {segments.map((segment, idx) => (
+                {segments.map((segment, idx) => {
+                  const zoneColors = {
+                    defending: { border: 'border-red-500', bg: 'bg-red-50', gradient: 'from-red-600 to-red-800', badge: 'bg-red-500 text-white' },
+                    midfield: { border: 'border-amber-500', bg: 'bg-amber-50', gradient: 'from-amber-500 to-amber-700', badge: 'bg-amber-500 text-white' },
+                    attacking: { border: 'border-emerald-500', bg: 'bg-emerald-50', gradient: 'from-emerald-600 to-emerald-800', badge: 'bg-emerald-500 text-white' },
+                    transition: { border: 'border-purple-500', bg: 'bg-purple-50', gradient: 'from-purple-600 to-purple-800', badge: 'bg-purple-500 text-white' }
+                  };
+                  const zone = segment.zone || 'defending';
+                  const colors = zoneColors[zone] || zoneColors.defending;
+                  const zoneName = zone.charAt(0).toUpperCase() + zone.slice(1);
+                  
+                  return (
                   <div
                     key={segment.id}
-                    className="relative group cursor-pointer rounded-lg overflow-hidden border-2 border-emerald-500 bg-emerald-50 transition-all hover:scale-105 hover:shadow-lg"
+                    className={`relative group cursor-pointer rounded-lg overflow-hidden border-2 ${colors.border} ${colors.bg} transition-all hover:scale-105 hover:shadow-lg`}
                     onClick={() => {
                       if (this.videoRef.current) {
                         this.videoRef.current.currentTime = segment.start_time + matchStartTime;
@@ -1818,7 +1829,7 @@ class VideoEditor extends Component {
                       <Trash2 className="w-3 h-3" />
                     </Button>
 
-                    <div className="w-40 h-24 bg-gradient-to-br from-emerald-600 to-emerald-800 relative flex items-center justify-center">
+                    <div className={`w-40 h-24 bg-gradient-to-br ${colors.gradient} relative flex items-center justify-center`}>
                       <div className="text-white text-center">
                         <div className="text-2xl font-bold mb-1">{idx + 1}</div>
                         <div className="text-xs opacity-90">Player Segment</div>
@@ -1842,15 +1853,14 @@ class VideoEditor extends Component {
                       </div>
                     </div>
 
-                    {segment.zone && (
-                      <div className="absolute bottom-2 left-2">
-                        <Badge variant="outline" className="text-xs bg-white/90 capitalize">
-                          {segment.zone}
-                        </Badge>
-                      </div>
-                    )}
+                    <div className="absolute bottom-2 left-2">
+                      <Badge className={`text-xs ${colors.badge}`}>
+                        {zoneName}
+                      </Badge>
+                    </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </CardContent>
