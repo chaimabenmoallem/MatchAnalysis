@@ -80,6 +80,7 @@ class VideoEditor extends Component {
       matchStartSet: false,
       matchStartTime: 0,
       playUntilTime: null,
+      playbackSpeed: 1,
       
       // UI state
       selectedZone: null,
@@ -224,14 +225,18 @@ class VideoEditor extends Component {
             video_id: video?.id,
             start_time: startTimeMs,
             end_time: endTimeMs,
-            segment_type: 'player_involvement',
+            segment_type: seg.zone || this.state.selectedZone,
             status: 'pending',
             zone: seg.zone || this.state.selectedZone
           });
         }
         
         // Save confirmed IDs to state
-        this.setState({ confirmedStartIds: newConfirmedIds });
+        this.setState({ confirmedStartIds: newConfirmedIds }, () => {
+          // After state is updated, force popup to get the new data
+          console.log('State updated with confirmedIds:', newConfirmedIds);
+          this.updatePopupSegments();
+        });
         
         // Reload segments (tags remain visible in popup)
         await this.loadSegments();
@@ -433,6 +438,13 @@ class VideoEditor extends Component {
     }
   };
 
+  handlePlaybackSpeedChange = (speed) => {
+    if (this.videoRef.current) {
+      this.videoRef.current.playbackRate = speed;
+      this.setState({ playbackSpeed: speed });
+    }
+  };
+
   handleSetMatchStart = async () => {
     const { currentTime } = this.state;
     this.setState({ 
@@ -472,6 +484,7 @@ class VideoEditor extends Component {
         description: `Tag at ${matchTime.toFixed(2)}s`
       });
       await this.loadTags();
+      this.updatePopupSegments();
     } catch (error) {
       console.error('Error creating tag:', error);
     }
@@ -788,8 +801,7 @@ class VideoEditor extends Component {
                 var h = Math.floor(seconds / 3600);
                 var m = Math.floor((seconds % 3600) / 60);
                 var s = Math.floor(seconds % 60);
-                if (h > 0) return h.toString().padStart(2,'0') + ':' + m.toString().padStart(2,'0') + ':' + s.toString().padStart(2,'0');
-                return m.toString().padStart(2,'0') + ':' + s.toString().padStart(2,'0');
+                return h.toString().padStart(2,'0') + ':' + m.toString().padStart(2,'0') + ':' + s.toString().padStart(2,'0');
               }
               
               function renderQueued() {
@@ -939,7 +951,7 @@ class VideoEditor extends Component {
                   var startSec = start.timestamp / 1000;
                   var endSec = end.timestamp / 1000;
                   
-                  console.log('Adding to queue:', start.id, '->', end.id, 'as string:', startIdStr);
+                  console.log('Adding to queue:', start.id, '->', end.id, 'as string:', startIdStr, 'with zone:', selectedZone);
                   
                   if (queuedStartIds[startIdStr]) {
                     console.log('Already queued, skipping');
@@ -952,7 +964,7 @@ class VideoEditor extends Component {
                     endId: end.id,
                     startTime: startSec,
                     endTime: endSec,
-                    zone: start.zone || selectedZone
+                    zone: selectedZone
                   });
                   console.log('Queue now has', queuedSegments.length, 'items, IDs:', Object.keys(queuedStartIds));
                   renderAll();
@@ -968,14 +980,52 @@ class VideoEditor extends Component {
                   var newStarts = event.data.involvedStarts || [];
                   var newEnds = event.data.involvedEnds || [];
                   var confirmedIds = event.data.confirmedStartIds || {};
+                  var segments = event.data.segments || [];
                   var newHash = JSON.stringify(newStarts.map(function(s){return s.id;})) + JSON.stringify(newEnds.map(function(e){return e.id;}));
+                  
+                  console.log('UPDATE_SEGMENTS received:', {
+                    confirmedIds: confirmedIds,
+                    segmentsCount: segments.length,
+                    startsCount: newStarts.length,
+                    endsCount: newEnds.length,
+                    segments: segments
+                  });
+                  
+                  // Build a set of tag pair IDs that already have segments in the database
+                  var confirmedSegmentStartIds = {};
+                  segments.forEach(function(seg) {
+                    // Match segments to their tag pairs by time
+                    // seg.start_time is in SECONDS (from loadSegments conversion)
+                    // start.timestamp is in MILLISECONDS
+                    newStarts.forEach(function(start) {
+                      var segStartMs = Math.round(seg.start_time * 1000); // Convert seconds to milliseconds
+                      var tagStartMs = start.timestamp; // Already in milliseconds
+                      console.log('Comparing segment time:', segStartMs, 'with tag time:', tagStartMs, 'diff:', Math.abs(segStartMs - tagStartMs));
+                      if (Math.abs(segStartMs - tagStartMs) < 100) { // Within 100ms tolerance
+                        confirmedSegmentStartIds[String(start.id)] = true;
+                        console.log('Matched! Marking as confirmed:', start.id);
+                      }
+                    });
+                  });
                   
                   // Merge confirmed IDs from parent into our local queue
                   var hasNewConfirmed = false;
                   for (var cid in confirmedIds) {
+                    console.log('Checking confirmed ID from parent:', cid, 'value:', confirmedIds[cid]);
                     if (confirmedIds[cid] && !queuedStartIds[cid]) {
                       queuedStartIds[cid] = true;
                       hasNewConfirmed = true;
+                      console.log('Marked as confirmed from parent:', cid);
+                    }
+                  }
+                  
+                  // Also mark segments already in database as confirmed
+                  for (var csid in confirmedSegmentStartIds) {
+                    console.log('Checking confirmed segment ID:', csid, 'value:', confirmedSegmentStartIds[csid]);
+                    if (confirmedSegmentStartIds[csid] && !queuedStartIds[csid]) {
+                      queuedStartIds[csid] = true;
+                      hasNewConfirmed = true;
+                      console.log('Marked as confirmed from database match:', csid);
                     }
                   }
                   
@@ -1010,15 +1060,6 @@ class VideoEditor extends Component {
             type: 'UPDATE_TIME', 
             time: this.getMatchTime(this.state.currentTime) 
           }, '*');
-          
-          const involvedStarts = this.state.tags.filter(t => t.tag_type === 'involved_start');
-          const involvedEnds = this.state.tags.filter(t => t.tag_type === 'involved_end');
-          popupWindow.postMessage({ 
-            type: 'UPDATE_SEGMENTS', 
-            involvedStarts: involvedStarts,
-            involvedEnds: involvedEnds,
-            segmentsCreated: this.state.segments.length
-          }, '*');
           requestAnimationFrame(updatePopup);
         }
       };
@@ -1026,6 +1067,7 @@ class VideoEditor extends Component {
     }
   };
 
+  // Send segments update to popup only when data changes
   updatePopupSegments = () => {
     if (this.popupWindowRef.current && !this.popupWindowRef.current.closed) {
       const involvedStarts = this.state.tags.filter(t => t.tag_type === 'involved_start');
@@ -1034,7 +1076,8 @@ class VideoEditor extends Component {
         type: 'UPDATE_SEGMENTS', 
         involvedStarts: involvedStarts,
         involvedEnds: involvedEnds,
-        confirmedStartIds: this.state.confirmedStartIds  // Send confirmed IDs to popup
+        confirmedStartIds: this.state.confirmedStartIds,
+        segments: this.state.segments
       }, '*');
     }
   };
@@ -1425,8 +1468,25 @@ class VideoEditor extends Component {
                 </Button>
               </div>
 
-              <div className="text-white font-mono text-sm">
-                {this.formatTime(currentTime)} / {this.formatTime(duration)}
+              <div className="flex items-center gap-4">
+                <div className="text-white font-mono text-sm">
+                  {this.formatTime(currentTime)} / {this.formatTime(duration)}
+                </div>
+
+                {/* Playback Speed Control */}
+                <div className="flex items-center gap-1 bg-white/10 rounded-lg p-1">
+                  {[0.5, 0.75, 1, 1.25, 1.5, 2].map(speed => (
+                    <Button
+                      key={speed}
+                      size="sm"
+                      variant={this.state.playbackSpeed === speed ? "default" : "ghost"}
+                      onClick={() => this.handlePlaybackSpeedChange(speed)}
+                      className={this.state.playbackSpeed === speed ? "bg-white text-slate-900 hover:bg-white/90" : "text-white hover:bg-white/20 text-xs"}
+                    >
+                      {speed}x
+                    </Button>
+                  ))}
+                </div>
               </div>
 
               {!matchStartSet && (

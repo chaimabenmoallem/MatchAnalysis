@@ -1,3 +1,13 @@
+#node_modules/
+#dist/
+#.env
+#.env.local
+#.env.*.local
+#*.log
+#npm-debug.log*
+#.DS_Store
+#.vite/
+
 node_modules/
 dist/
 .env
@@ -5,5 +15,19 @@ dist/
 .env.*.local
 *.log
 npm-debug.log*
+
+# Python
+__pycache__/
+venv/
+
+# Flask
+instance/
+*.pyc
+
+# Build
+build/
+
+
+# OS
 .DS_Store
 .vite/

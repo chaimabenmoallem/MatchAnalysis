@@ -328,6 +328,23 @@ export default function AnalystDashboard() {
     selectedCategory && 
     annotation.pitch_start_x !== undefined;
 
+  // Debug logging for save button state
+  React.useEffect(() => {
+    console.log('Save button state:', {
+      canSave,
+      actionStart,
+      actionEnd,
+      selectedCategory,
+      pitch_start_x: annotation.pitch_start_x,
+      reasons: {
+        'actionStart set': actionStart !== null,
+        'actionEnd set': actionEnd !== null,
+        'category selected': !!selectedCategory,
+        'pitch position set': annotation.pitch_start_x !== undefined
+      }
+    });
+  }, [actionStart, actionEnd, selectedCategory, annotation.pitch_start_x]);
+
   if (!taskId) {
     if (allTasksLoading) {
       return (

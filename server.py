@@ -67,6 +67,36 @@ class ActionAnnotation(db.Model):
     end_time = db.Column(db.Float)
     action_category = db.Column(db.String(100))
     note = db.Column(db.Text)
+    
+    # Pitch position data
+    pitch_start_x = db.Column(db.Float)
+    pitch_start_y = db.Column(db.Float)
+    pitch_end_x = db.Column(db.Float)
+    pitch_end_y = db.Column(db.Float)
+    
+    # Action outcome and context
+    outcome = db.Column(db.String(50))  # successful, unsuccessful
+    context = db.Column(db.String(50))  # open_play, set_piece
+    
+    # General action details
+    pass_length = db.Column(db.String(50))  # Changed from Float to String (short, medium, long)
+    pass_direction = db.Column(db.String(100))
+    
+    # Shot/Goal details
+    shot_result = db.Column(db.String(50))  # goal, saved, blocked, wide, etc.
+    goal_target_x = db.Column(db.Float)
+    goal_target_y = db.Column(db.Float)
+    
+    # Player action details
+    body_part = db.Column(db.String(50))  # foot, head, chest, etc.
+    defensive_pressure = db.Column(db.Integer)  # 0-10 scale
+    opponents_bypassed = db.Column(db.Integer)
+    
+    # Defensive specific
+    defensive_action_type = db.Column(db.String(100))  # tackle, interception, block, etc.
+    defensive_consequence = db.Column(db.String(100))  # possession_won, dispossessed, etc.
+    
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 class VideoTag(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -328,18 +358,61 @@ def get_task(task_id):
 def create_annotation():
     try:
         data = request.json
+        print(f"[API] Creating annotation with data keys: {data.keys()}")
         annotation = ActionAnnotation(
             video_id=data.get('video_id'),
             start_time=data.get('start_time'),
             end_time=data.get('end_time'),
             action_category=data.get('action_category'),
-            note=data.get('note')
+            note=data.get('note'),
+            # Pitch position
+            pitch_start_x=data.get('pitch_start_x'),
+            pitch_start_y=data.get('pitch_start_y'),
+            pitch_end_x=data.get('pitch_end_x'),
+            pitch_end_y=data.get('pitch_end_y'),
+            # Outcome and context
+            outcome=data.get('outcome'),
+            context=data.get('context'),
+            # General action details
+            pass_length=data.get('pass_length'),
+            pass_direction=data.get('pass_direction'),
+            # Shot/Goal details
+            shot_result=data.get('shot_result'),
+            goal_target_x=data.get('goal_target_x'),
+            goal_target_y=data.get('goal_target_y'),
+            # Player action details
+            body_part=data.get('body_part'),
+            defensive_pressure=data.get('defensive_pressure'),
+            opponents_bypassed=data.get('opponents_bypassed'),
+            # Defensive specific
+            defensive_action_type=data.get('defensive_action_type'),
+            defensive_consequence=data.get('defensive_consequence')
         )
         db.session.add(annotation)
         db.session.commit()
+        print(f"[API] Annotation created successfully with id: {annotation.id}")
         return jsonify({'id': annotation.id}), 201
     except Exception as e:
         db.session.rollback()
+        error_msg = str(e)
+        print(f"[API ERROR] Failed to create annotation: {error_msg}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': error_msg}), 500
+
+@app.route('/api/debug/schema', methods=['GET'])
+def debug_schema():
+    """Debug endpoint to check database schema"""
+    try:
+        from sqlalchemy import text, inspect
+        inspector = inspect(db.engine)
+        columns = inspector.get_columns('action_annotation')
+        return jsonify({
+            'table': 'action_annotation',
+            'columns': [col['name'] for col in columns],
+            'column_count': len(columns)
+        })
+    except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/annotations/<video_id>', methods=['GET'])
@@ -351,7 +424,24 @@ def get_annotations(video_id):
         'start_time': a.start_time,
         'end_time': a.end_time,
         'action_category': a.action_category,
-        'note': a.note
+        'note': a.note,
+        'pitch_start_x': a.pitch_start_x,
+        'pitch_start_y': a.pitch_start_y,
+        'pitch_end_x': a.pitch_end_x,
+        'pitch_end_y': a.pitch_end_y,
+        'outcome': a.outcome,
+        'context': a.context,
+        'pass_length': a.pass_length,
+        'pass_direction': a.pass_direction,
+        'shot_result': a.shot_result,
+        'goal_target_x': a.goal_target_x,
+        'goal_target_y': a.goal_target_y,
+        'body_part': a.body_part,
+        'defensive_pressure': a.defensive_pressure,
+        'opponents_bypassed': a.opponents_bypassed,
+        'defensive_action_type': a.defensive_action_type,
+        'defensive_consequence': a.defensive_consequence,
+        'created_at': a.created_at.isoformat() if a.created_at else None
     } for a in annotations])
 
 @app.route('/api/extract-frames', methods=['POST'])
@@ -410,7 +500,70 @@ def extract_frames():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+def migrate_database():
+    """Add missing columns to action_annotation table"""
+    try:
+        from sqlalchemy import text, inspect
+        
+        with app.app_context():
+            inspector = inspect(db.engine)
+            
+            # Get existing columns in action_annotation table
+            if 'action_annotation' in inspector.get_table_names():
+                existing_columns = {col['name'] for col in inspector.get_columns('action_annotation')}
+                
+                # Columns to add
+                columns_to_add = [
+                    ('pitch_start_x', 'DOUBLE PRECISION'),
+                    ('pitch_start_y', 'DOUBLE PRECISION'),
+                    ('pitch_end_x', 'DOUBLE PRECISION'),
+                    ('pitch_end_y', 'DOUBLE PRECISION'),
+                    ('outcome', 'VARCHAR(50)'),
+                    ('context', 'VARCHAR(50)'),
+                    ('pass_length', 'VARCHAR(50)'),  # Changed from DOUBLE PRECISION to VARCHAR
+                    ('pass_direction', 'VARCHAR(100)'),
+                    ('shot_result', 'VARCHAR(50)'),
+                    ('goal_target_x', 'DOUBLE PRECISION'),
+                    ('goal_target_y', 'DOUBLE PRECISION'),
+                    ('body_part', 'VARCHAR(50)'),
+                    ('defensive_pressure', 'INTEGER'),
+                    ('opponents_bypassed', 'INTEGER'),
+                    ('defensive_action_type', 'VARCHAR(100)'),
+                    ('defensive_consequence', 'VARCHAR(100)'),
+                    ('created_at', 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP'),
+                ]
+                
+                # Add missing columns
+                for col_name, col_type in columns_to_add:
+                    if col_name not in existing_columns:
+                        try:
+                            with db.engine.begin() as conn:
+                                conn.execute(text(f"ALTER TABLE action_annotation ADD COLUMN {col_name} {col_type}"))
+                            print(f"+ Added column: {col_name}")
+                        except Exception as e:
+                            print(f"  Note: {col_name} - {str(e)[:100]}")
+                
+                # Fix pass_length column type if it's wrong
+                try:
+                    with db.engine.begin() as conn:
+                        result = conn.execute(text("""
+                            SELECT column_name, data_type 
+                            FROM information_schema.columns 
+                            WHERE table_name = 'action_annotation' AND column_name = 'pass_length'
+                        """))
+                        col_info = result.fetchone()
+                        if col_info and col_info[1] == 'double precision':
+                            print("[DB] Fixing pass_length column type...")
+                            conn.execute(text("ALTER TABLE action_annotation DROP COLUMN pass_length"))
+                            conn.execute(text("ALTER TABLE action_annotation ADD COLUMN pass_length VARCHAR(50)"))
+                            print("[DB] pass_length column type fixed to VARCHAR(50)")
+                except Exception as e:
+                    print(f"[DB] Note on pass_length fix: {str(e)[:100]}")
+    except Exception as e:
+        pass
+
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
+        migrate_database()
     app.run(host='0.0.0.0', port=8080)
