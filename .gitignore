@@ -17,7 +17,7 @@ dist/
 npm-debug.log*
 
 # Uploads & videos
-uploads/
+videos/
 *.mp4
 *.avi
 *.mov
