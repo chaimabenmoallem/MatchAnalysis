@@ -190,7 +190,7 @@ export default class Home extends Component {
                 <Video className="w-5 h-5 text-emerald-500" />
                 Recent Videos
               </CardTitle>
-              <Link to={createPageUrl('Tasks')}>
+              <Link to={createPageUrl('VideoEditor')}>
                 <Button variant="ghost" size="sm" className="text-slate-500">
                   View All <ArrowRight className="w-4 h-4 ml-1" />
                 </Button>

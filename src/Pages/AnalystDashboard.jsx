@@ -320,7 +320,7 @@ export default function AnalystDashboard() {
         completed_date: new Date().toISOString()
       }
     });
-    navigate(createPageUrl('Tasks'));
+    navigate(createPageUrl('AnalystDashboard'));
   };
 
   const canSave = actionStart !== null && 

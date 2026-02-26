@@ -31,6 +31,16 @@ export default function EnhancedTimeline({
   const [dragState, setDragState] = useState(null);
   const timelineRef = useRef(null);
 
+  // Dynamically determine time interval based on duration
+  const getTimeInterval = () => {
+    if (duration < 300) return 30; // < 5 min: every 30 seconds
+    if (duration < 1800) return 120; // < 30 min: every 2 minutes
+    if (duration < 3600) return 300; // < 60 min: every 5 minutes
+    return 300; // >= 60 min: every 5 minutes
+  };
+
+  const timeInterval = getTimeInterval();
+
   const formatTime = (seconds) => {
     const m = Math.floor(seconds / 60);
     const s = Math.floor(seconds % 60);
@@ -134,14 +144,14 @@ export default function EnhancedTimeline({
             <div className="w-28 text-xs font-medium text-slate-500">Timeline</div>
             <div className="flex-1 relative h-6">
               {/* Time markers */}
-              {Array.from({ length: Math.ceil(duration / 60) + 1 }).map((_, i) => (
+              {Array.from({ length: Math.ceil(duration / timeInterval) + 1 }).map((_, i) => (
                 <div
                   key={i}
                   className="absolute top-0"
-                  style={{ left: `${timeToPixels(i * 60)}px` }}
+                  style={{ left: `${timeToPixels(i * timeInterval)}px` }}
                 >
                   <div className="w-px h-4 bg-slate-300"></div>
-                  <div className="text-xs text-slate-400 -ml-4 mt-1">{formatTime(i * 60)}</div>
+                  <div className="text-xs text-slate-400 -ml-4 mt-1">{formatTime(i * timeInterval)}</div>
                 </div>
               ))}
               {/* Current time indicator */}
@@ -154,7 +164,7 @@ export default function EnhancedTimeline({
             </div>
           </div>
 
-          {/* Segments Row */}
+          {/* Segments Header */}
           <div className="border-b border-slate-100">
             <div className="flex items-center py-1 hover:bg-slate-50">
               <button
@@ -169,20 +179,28 @@ export default function EnhancedTimeline({
                 Player Segments
                 <Badge variant="outline" className="ml-auto">{segments.length}</Badge>
               </button>
-              <div className="flex-1 relative h-12 cursor-pointer" onClick={(e) => {
-                const rect = e.currentTarget.getBoundingClientRect();
-                const x = e.clientX - rect.left;
-                const time = pixelsToTime(x);
-                onSeek(time);
-              }}>
-                {expandedRows.has('segments') && segments.map((seg, idx) => {
-                  const color = zoneColors[seg.zone] || zoneColors.defending;
-                  const left = timeToPixels(seg.start_time);
-                  const width = timeToPixels(seg.end_time - seg.start_time);
+            </div>
+          </div>
 
-                  return (
+          {/* Individual Segment Rows */}
+          {expandedRows.has('segments') && segments.map((seg, idx) => {
+            const color = zoneColors[seg.zone] || zoneColors.defending;
+            const left = timeToPixels(seg.start_time);
+            const width = timeToPixels(seg.end_time - seg.start_time);
+
+            return (
+              <div key={seg.id} className="border-b border-slate-100">
+                <div className="flex items-center py-1 hover:bg-slate-50">
+                  <div className="w-28 text-xs font-medium text-slate-600 px-2 truncate">
+                    Segment {idx + 1}
+                  </div>
+                  <div className="flex-1 relative h-12 cursor-pointer" onClick={(e) => {
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    const x = e.clientX - rect.left;
+                    const time = pixelsToTime(x);
+                    onSeek(time);
+                  }}>
                     <div
-                      key={seg.id}
                       className={`absolute h-10 ${color.bg} ${color.border} border-2 rounded-lg shadow-sm hover:shadow-md transition-all group cursor-move`}
                       style={{ 
                         left: `${left}px`, 
@@ -296,11 +314,11 @@ export default function EnhancedTimeline({
                         </div>
                       </div>
                     </div>
-                  );
-                })}
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
+            );
+          })}
 
           {/* Legend */}
           <div className="mt-2 pt-2 border-t border-slate-200">
