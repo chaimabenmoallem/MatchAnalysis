@@ -85,7 +85,7 @@ export default class Layout extends Component {
               <div className="w-8 h-8 bg-emerald-500 rounded-lg flex items-center justify-center">
                 <Play className="w-4 h-4 text-white" />
               </div>
-              <span className="font-semibold text-lg">Globalstt</span>
+              <span className="font-semibold text-lg">glob</span>
             </div>
             <button 
               className="lg:hidden p-1 hover:bg-slate-800 rounded"

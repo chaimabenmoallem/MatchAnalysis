@@ -1,4 +1,4 @@
-# Video Annotation App (Globalstt)
+# Video Annotation App (glob)
 
 ## Overview
 This is a video annotation application built with React, Vite, and Material-UI. It allows users to upload, edit, and annotate videos with various tools including player identification, timeline editing, and analyst dashboards.
