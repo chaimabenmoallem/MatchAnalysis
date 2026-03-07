@@ -7,7 +7,7 @@ This is a video annotation application built with React, Vite, and Material-UI. 
 - **Frontend**: React 18 with Vite
 - **UI Libraries**: Material-UI, Radix UI, Tailwind CSS
 - **State Management**: TanStack React Query
-- **Backend/Database**: Supabase
+- **Backend/Database**: PostgreSQL
 - **External API**: Base44 API for entity management
 - **Styling**: Tailwind CSS with clsx and tailwind-merge
 
@@ -41,10 +41,6 @@ npm run dev
 - **Video Editor** (`/videoeditor`) - Video editing and annotation tools
 - **Analyst Dashboard** (`/analystdashboard`) - Analytics and insights
 - **Admin** (`/admin`) - Administrative functions
-
-## Environment Variables
-- `VITE_SUPABASE_URL` - Supabase project URL
-- `VITE_SUPABASE_ANON_KEY` - Supabase anonymous key
 
 ## Deployment
 Build for production:

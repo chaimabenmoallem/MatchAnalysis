@@ -1,13 +1,14 @@
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, send_file
 import os
 import cv2
-import base64
 import requests
 import tempfile
 import json
+import io
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
-from datetime import datetime
+from datetime import datetime, timezone
+import uuid
 
 app = Flask(__name__)
 CORS(app)
@@ -115,6 +116,15 @@ class VideoSegment(db.Model):
     end_time = db.Column(db.Integer)
     segment_type = db.Column(db.String(100))
     description = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+class VideoFrame(db.Model):
+    id = db.Column(db.String(255), primary_key=True)
+    video_id = db.Column(db.String(255), db.ForeignKey('video.id'))
+    frame_index = db.Column(db.Integer)
+    frame_data = db.Column(db.LargeBinary)
+    width = db.Column(db.Integer)
+    height = db.Column(db.Integer)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 # Routes
@@ -248,7 +258,8 @@ def create_video():
         if not data:
             return jsonify({'error': 'No data provided'}), 400
         url = data.get('url') or data.get('file_url')
-        video_id = data.get('id') or str(int(datetime.utcnow().timestamp() * 1000))
+        video_id = data.get('id') or str(int(datetime.now(timezone.utc).timestamp() * 1000))
+        print(f"[DEBUG] Creating video with ID: {video_id}, URL: {url}")
         video = Video(
             id=video_id,
             title=data.get('title', 'Untitled Video'),
@@ -262,6 +273,7 @@ def create_video():
         )
         db.session.add(video)
         db.session.commit()
+        print(f"[DEBUG] Video created successfully with ID: {video.id}")
         return jsonify({
             'id': video.id,
             'title': video.title,
@@ -271,6 +283,9 @@ def create_video():
         }), 201
     except Exception as e:
         db.session.rollback()
+        import traceback
+        traceback.print_exc()
+        print(f"[ERROR] Failed to create video: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 class VideoTask(db.Model):
@@ -449,8 +464,23 @@ def extract_frames():
     try:
         data = request.json
         video_url = data.get('url')
+        video_id = data.get('video_id')
         if not video_url:
             return jsonify({'error': 'Video URL required'}), 400
+        if not video_id:
+            return jsonify({'error': 'Video ID required'}), 400
+        
+        # Verify video exists in database
+        video = Video.query.filter_by(id=video_id).first()
+        if not video:
+            return jsonify({'error': f'Video with ID {video_id} not found in database'}), 404
+        
+        print(f"[DEBUG] Extracting frames for video ID: {video_id}")
+        
+        # Delete existing frames for this video first
+        VideoFrame.query.filter_by(video_id=video_id).delete()
+        db.session.commit()
+        
         local_path = None
         if not video_url.startswith('http'):
             local_path = os.path.abspath(os.path.join(os.getcwd(), video_url))
@@ -487,28 +517,110 @@ def extract_frames():
             ret, frame = cap.read()
             if ret:
                 frame = cv2.resize(frame, (480, 270))
+                height, width = frame.shape[:2]
                 _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
-                frame_base64 = base64.b64encode(buffer).decode('utf-8')
-                frames.append(f"data:image/jpeg;base64,{frame_base64}")
+                frame_id = str(uuid.uuid4())
+                
+                # Save frame to database
+                try:
+                    video_frame = VideoFrame(
+                        id=frame_id,
+                        video_id=video_id,
+                        frame_index=frame_idx,
+                        frame_data=buffer.tobytes(),
+                        width=width,
+                        height=height
+                    )
+                    db.session.add(video_frame)
+                except Exception as frame_err:
+                    print(f"[ERROR] Failed to create frame object: {frame_err}")
+                    raise
+                
+                frames.append({
+                    'id': frame_id,
+                    'frame_index': frame_idx,
+                    'width': width,
+                    'height': height
+                })
+        
+        print(f"[DEBUG] Committing {len(frames)} frames to database...")
+        db.session.commit()
         cap.release()
         if local_path and local_path.startswith(tempfile.gettempdir()):
             try: os.remove(local_path)
             except: pass
         if not frames:
             return jsonify({'error': 'No frames extracted'}), 500
+        print(f"[DEBUG] Successfully extracted and saved {len(frames)} frames")
         return jsonify({'frames': frames})
+    except Exception as e:
+        db.session.rollback()
+        import traceback
+        error_msg = str(e)
+        traceback.print_exc()
+        print(f"[ERROR] Frame extraction failed: {error_msg}")
+        return jsonify({'error': f'Frame extraction failed: {error_msg}'}), 500
+
+@app.route('/api/frame/<frame_id>', methods=['GET'])
+def get_frame(frame_id):
+    try:
+        video_frame = VideoFrame.query.filter_by(id=frame_id).first()
+        if not video_frame:
+            return jsonify({'error': 'Frame not found'}), 404
+        return send_file(
+            io.BytesIO(video_frame.frame_data),
+            mimetype='image/jpeg',
+            as_attachment=False
+        )
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/video/<video_id>/frames', methods=['GET'])
+def get_video_frames(video_id):
+    try:
+        frames = VideoFrame.query.filter_by(video_id=video_id).order_by(VideoFrame.frame_index).all()
+        return jsonify([{
+            'id': f.id,
+            'frame_index': f.frame_index,
+            'width': f.width,
+            'height': f.height,
+            'url': f'/api/frame/{f.id}'
+        } for f in frames])
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 def migrate_database():
-    """Add missing columns to action_annotation table"""
+    """Add missing columns to tables and fix schema issues"""
     try:
         from sqlalchemy import text, inspect
         
         with app.app_context():
             inspector = inspect(db.engine)
             
-            # Get existing columns in action_annotation table
+            # ============= Fix video_frame table =============
+            if 'video_frame' in inspector.get_table_names():
+                existing_columns = {col['name'] for col in inspector.get_columns('video_frame')}
+                
+                # Check if id column exists and is wrong type
+                try:
+                    with db.engine.begin() as conn:
+                        result = conn.execute(text("""
+                            SELECT column_name, data_type 
+                            FROM information_schema.columns 
+                            WHERE table_name = 'video_frame' AND column_name = 'id'
+                        """))
+                        col_info = result.fetchone()
+                        if col_info and col_info[1] in ['integer', 'bigint']:
+                            print("[DB] Dropping video_frame table to recreate with correct schema...")
+                            conn.execute(text("DROP TABLE IF EXISTS video_frame CASCADE"))
+                            print("[DB] Dropped video_frame table")
+                except Exception as e:
+                    print(f"[DB] Could not check video_frame id type: {str(e)[:100]}")
+                
+                # After dropping, let db.create_all() recreate it
+                print("[DB] Recreating video_frame table with db.create_all()...")
+            
+            # ============= Migrate action_annotation table =============
             if 'action_annotation' in inspector.get_table_names():
                 existing_columns = {col['name'] for col in inspector.get_columns('action_annotation')}
                 
@@ -520,7 +632,7 @@ def migrate_database():
                     ('pitch_end_y', 'DOUBLE PRECISION'),
                     ('outcome', 'VARCHAR(50)'),
                     ('context', 'VARCHAR(50)'),
-                    ('pass_length', 'VARCHAR(50)'),  # Changed from DOUBLE PRECISION to VARCHAR
+                    ('pass_length', 'VARCHAR(50)'),
                     ('pass_direction', 'VARCHAR(100)'),
                     ('shot_result', 'VARCHAR(50)'),
                     ('goal_target_x', 'DOUBLE PRECISION'),
@@ -539,9 +651,9 @@ def migrate_database():
                         try:
                             with db.engine.begin() as conn:
                                 conn.execute(text(f"ALTER TABLE action_annotation ADD COLUMN {col_name} {col_type}"))
-                            print(f"+ Added column: {col_name}")
+                            print(f"+ Added column to action_annotation: {col_name}")
                         except Exception as e:
-                            print(f"  Note: {col_name} - {str(e)[:100]}")
+                            print(f"  Note: action_annotation.{col_name} - {str(e)[:100]}")
                 
                 # Fix pass_length column type if it's wrong
                 try:
@@ -560,6 +672,7 @@ def migrate_database():
                 except Exception as e:
                     print(f"[DB] Note on pass_length fix: {str(e)[:100]}")
     except Exception as e:
+        print(f"[DB Migration Error]: {str(e)}")
         pass
 
 if __name__ == '__main__':

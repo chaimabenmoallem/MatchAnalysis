@@ -1,4 +1,3 @@
-// src/api/supabaseClient.js
 const API_BASE_URL = '/api';
 
 // ============= Video Management =============
@@ -123,11 +122,11 @@ export const actionAnnotationService = {
     if (!response.ok) throw new Error('Failed to fetch annotations');
     return await response.json();
   },
-  async extractFrames(videoUrl) {
+  async extractFrames(videoUrl, videoId) {
     const response = await fetch(`${API_BASE_URL}/extract-frames`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url: videoUrl })
+      body: JSON.stringify({ url: videoUrl, video_id: videoId })
     });
     if (!response.ok) throw new Error('Failed to extract frames');
     return await response.json();
@@ -210,7 +209,6 @@ export const authService = {
   signup: async () => ({ user: { id: '1' } })
 };
 
-export const supabase = {};
 export const base44 = {
     auth: authService,
     entities: {

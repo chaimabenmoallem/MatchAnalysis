@@ -97,7 +97,13 @@ class VideoEditor extends Component {
       
       // Filters
       searchTerm: '',
-      statusFilter: 'all'
+      statusFilter: 'all',
+      
+      // Notifications
+      notification: null,
+      
+      // Analyst task tracking
+      analystTaskCreated: false
     };
   }
 
@@ -227,7 +233,8 @@ class VideoEditor extends Component {
             end_time: endTimeMs,
             segment_type: seg.zone || this.state.selectedZone,
             status: 'pending',
-            zone: seg.zone || this.state.selectedZone
+            zone: seg.zone || this.state.selectedZone,
+            description: `${seg.zone || this.state.selectedZone} - Player segment from ${seg.startTime.toFixed(2)}s to ${seg.endTime.toFixed(2)}s`
           });
         }
         
@@ -306,11 +313,23 @@ class VideoEditor extends Component {
   };
 
   loadVideo = async (videoId) => {
-    this.setState({ videoLoading: true });
+    this.setState({ videoLoading: true, analystTaskCreated: false });
     try {
       const video = await videoService.get(videoId);
       if (video) {
-        this.setState({ video, videoLoading: false });
+        // Check if an analyst task already exists for this video
+        let analystTaskCreated = false;
+        try {
+          const tasks = await videoTaskService.list();
+          const existingTask = tasks.find(t => t.video_id === videoId && t.task_type === 'analyst_annotation');
+          if (existingTask) {
+            analystTaskCreated = true;
+          }
+        } catch (error) {
+          console.error('Error checking existing tasks:', error);
+        }
+        
+        this.setState({ video, videoLoading: false, analystTaskCreated });
         // Extract frames automatically when video is loaded
         if (video.url) {
           this.handleExtractFrames(video.url);
@@ -551,16 +570,43 @@ class VideoEditor extends Component {
       status: 'completed'
     });
 
-    await videoTaskService.create({
-      video_id: video.id,
-      task_type: 'analyst_annotation',
-      status: 'pending_assignment',
-      priority: task?.priority || 'medium',
-      notes: task?.notes
-    });
-
     this.setState({ pendingSegments: [] });
     await this.loadSegments();
+  };
+
+  showNotification = (message, type = 'success') => {
+    this.setState({ notification: { message, type } });
+    setTimeout(() => {
+      this.setState({ notification: null });
+    }, 3000);
+  };
+
+  handleCreateAnalystTask = async () => {
+    const { segments, video, task, analystTaskCreated } = this.state;
+    
+    if (analystTaskCreated) {
+      return;
+    }
+    
+    if (!segments || segments.length === 0) {
+      this.showNotification('No segments to create analyst task. Please confirm segments first.', 'error');
+      return;
+    }
+
+    try {
+      await videoTaskService.create({
+        video_id: video.id,
+        task_type: 'analyst_annotation',
+        status: 'pending_assignment',
+        priority: task?.priority || 'medium',
+        notes: task?.notes
+      });
+      this.setState({ analystTaskCreated: true });
+      this.showNotification('Analyst task created successfully!', 'success');
+    } catch (error) {
+      console.error('Error creating analyst task:', error);
+      this.showNotification('Error creating analyst task. Please try again.', 'error');
+    }
   };
 
   handlePopOutDashboard = () => {
@@ -741,11 +787,11 @@ class VideoEditor extends Component {
             
             <div style="margin-bottom: 20px;">
               <strong style="display: block; margin-bottom: 8px;">Field Zone</strong>
-              <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;">
+              <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;">
                 <button class="zone-btn" onclick="selectZone('defending', this)">Defending</button>
-                <button class="zone-btn" onclick="selectZone('midfield', this)">Midfield</button>
                 <button class="zone-btn" onclick="selectZone('attacking', this)">Attacking</button>
-                <button class="zone-btn" onclick="selectZone('transition', this)">Transition</button>
+                <button class="zone-btn" onclick="selectZone('offensive_transition', this)">Offensive Transition</button>
+                <button class="zone-btn" onclick="selectZone('defensive_transition', this)">Defensive Transition</button>
               </div>
               <p id="selected-zone" style="margin-top: 8px; color: #64748b; font-size: 14px;">No zone selected</p>
             </div>
@@ -770,7 +816,7 @@ class VideoEditor extends Component {
               <p style="font-weight: 600; margin-bottom: 12px;">Queued Segments (<span id="queued-count">0</span>)</p>
               <div id="queued-list"></div>
               <button class="confirm-btn" id="confirm-btn" onclick="confirmAll()" disabled>
-                ⏱ Confirm All & Create Analyst Task (<span id="confirm-count">0</span>)
+                ⏱ Confirm (<span id="confirm-count">0</span>)
               </button>
             </div>
             
@@ -781,11 +827,18 @@ class VideoEditor extends Component {
               var allStarts = [];
               var allEnds = [];
               
+              var zoneLabels = {
+                'defending': 'Defending',
+                'attacking': 'Attacking',
+                'offensive_transition': 'Offensive Transition',
+                'defensive_transition': 'Defensive Transition'
+              };
+              
               function selectZone(zone, btn) {
                 selectedZone = zone;
                 document.querySelectorAll('.zone-btn').forEach(function(b) { b.classList.remove('selected'); });
                 btn.classList.add('selected');
-                document.getElementById('selected-zone').textContent = 'Zone: ' + zone;
+                document.getElementById('selected-zone').textContent = 'Zone: ' + zoneLabels[zone];
                 if (window.opener && window.opener.setSelectedZoneFromPopup) {
                   window.opener.setSelectedZoneFromPopup(zone);
                 }
@@ -821,7 +874,8 @@ class VideoEditor extends Component {
                     html += '<span style="color: #3b82f6; font-weight: 600;">●</span>';
                     html += '<span style="font-weight: 500;">#' + (i + 1) + '</span>';
                     html += '<span>' + formatTime(seg.startTime) + ' - ' + formatTime(seg.endTime) + '</span>';
-                    html += '<span class="zone-badge">' + (seg.zone || 'No zone') + '</span>';
+                    var zoneLabel = zoneLabels[seg.zone] || seg.zone || 'No zone';
+                    html += '<span class="zone-badge">' + zoneLabel + '</span>';
                     html += '</div>';
                   }
                   list.innerHTML = html;
@@ -1106,7 +1160,8 @@ class VideoEditor extends Component {
       pendingSegments,
       searchTerm,
       statusFilter,
-      playUntilTime
+      playUntilTime,
+      notification
     } = this.state;
 
     const involvedStarts = tags.filter(t => t.tag_type === 'involved_start');
@@ -1116,9 +1171,9 @@ class VideoEditor extends Component {
 
     const zones = [
       { id: 'defending', label: 'Defending', color: 'bg-red-500' },
-      { id: 'midfield', label: 'Midfield', color: 'bg-amber-500' },
       { id: 'attacking', label: 'Attacking', color: 'bg-emerald-500' },
-      { id: 'transition', label: 'Transition', color: 'bg-purple-500' }
+      { id: 'offensive_transition', label: 'Off Transition', color: 'bg-blue-500' },
+      { id: 'defensive_transition', label: 'Def Transition', color: 'bg-amber-500' }
     ];
 
     if (!taskId) {
@@ -1278,6 +1333,15 @@ class VideoEditor extends Component {
 
     return (
       <div className="space-y-6">
+        {/* Notification */}
+        {notification && (
+          <div className={`fixed top-4 right-4 px-4 py-3 rounded-lg shadow-lg text-white z-50 ${
+            notification.type === 'success' ? 'bg-emerald-500' : 'bg-red-500'
+          }`}>
+            <p className="font-medium">{notification.message}</p>
+          </div>
+        )}
+        
         {/* Create Task Dialog for New Videos */}
         <Dialog open={this.state.showCreateTaskDialog} onOpenChange={(open) => this.setState({ showCreateTaskDialog: open })}>
           <DialogContent className="max-w-md">
@@ -1342,6 +1406,17 @@ class VideoEditor extends Component {
           </DialogContent>
         </Dialog>
 
+        {/* Read-Only Mode Banner */}
+        {this.state.analystTaskCreated && (
+          <div className="mb-4 p-4 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-3">
+            <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
+            <div>
+              <p className="text-sm font-medium text-amber-900">Video Editor is Read-Only</p>
+              <p className="text-xs text-amber-700 mt-0.5">The analyst task has been created. You cannot modify segments or create new ones until a new video is loaded.</p>
+            </div>
+          </div>
+        )}
+
         {/* Video Info Header */}
         <div className="flex items-center justify-between">
           <div>
@@ -1368,10 +1443,19 @@ class VideoEditor extends Component {
               <>
                 <Button 
                   onClick={() => this.setState({ showTaggingDialog: true })}
-                  className="bg-emerald-600 hover:bg-emerald-700"
+                  disabled={this.state.analystTaskCreated}
+                  className={this.state.analystTaskCreated ? "bg-gray-400 cursor-not-allowed" : "bg-emerald-600 hover:bg-emerald-700"}
                 >
                   <MapPin className="w-4 h-4 mr-2" />
                   Open Tagging Dashboard
+                </Button>
+                <Button 
+                  onClick={this.handleCreateAnalystTask}
+                  disabled={this.state.analystTaskCreated}
+                  className={this.state.analystTaskCreated ? "bg-gray-400 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700"}
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  {this.state.analystTaskCreated ? 'Task Created' : 'Create Analyst Task'}
                 </Button>
                 <Badge className={task?.status === 'in_progress' ? 'bg-purple-100 text-purple-700' : 'bg-amber-100 text-amber-700'}>
                   {task?.status?.replace(/_/g, ' ')}
@@ -1504,6 +1588,7 @@ class VideoEditor extends Component {
                 duration={duration}
                 currentTime={this.getMatchTime(currentTime)}
                 matchStartTime={matchStartTime}
+                readOnly={this.state.analystTaskCreated}
                 onSeek={(time) => {
                   if (this.videoRef.current) {
                     this.videoRef.current.currentTime = time + matchStartTime;
@@ -1516,15 +1601,15 @@ class VideoEditor extends Component {
                     this.setState({ isPlaying: true, playUntilTime: segment.end_time });
                   }
                 }}
-                onUpdateSegment={async (id, data) => {
+                onUpdateSegment={!this.state.analystTaskCreated ? async (id, data) => {
                   // Convert seconds back to milliseconds for database
                   const dbData = {};
                   if (data.start_time !== undefined) dbData.start_time = Math.round(data.start_time * 1000);
                   if (data.end_time !== undefined) dbData.end_time = Math.round(data.end_time * 1000);
                   await videoSegmentService.update(id, dbData);
                   await this.loadSegments();
-                }}
-                onDeleteSegment={async (id) => {
+                } : undefined}
+                onDeleteSegment={!this.state.analystTaskCreated ? async (id) => {
                   try {
                     const segment = segments.find(seg => seg.id === id);
                     if (!segment) return;
@@ -1550,8 +1635,8 @@ class VideoEditor extends Component {
                     await this.loadTags();
                     await this.loadSegments();
                   } catch (error) {}
-                }}
-                onEditSegment={(segment) => {
+                } : undefined}
+                onEditSegment={!this.state.analystTaskCreated ? (segment) => {
                   if (this.videoRef.current) {
                     this.videoRef.current.currentTime = segment.start_time + matchStartTime;
                   }
@@ -1559,7 +1644,7 @@ class VideoEditor extends Component {
                     this.setState({ selectedZone: segment.zone });
                   }
                   this.setState({ showTaggingDialog: true });
-                }}
+                } : undefined}
               />
             </div>
           </CardContent>
@@ -1591,6 +1676,7 @@ class VideoEditor extends Component {
                 <Button
                   variant="outline"
                   size="sm"
+                  disabled={this.state.analystTaskCreated}
                   onClick={this.handlePopOutDashboard}
                   className="gap-2"
                 >
@@ -1611,6 +1697,7 @@ class VideoEditor extends Component {
                       <Button
                         key={zone.id}
                         variant={selectedZone === zone.id ? 'default' : 'outline'}
+                        disabled={this.state.analystTaskCreated}
                         className={selectedZone === zone.id ? zone.color : ''}
                         onClick={() => this.setState({ selectedZone: zone.id })}
                       >
@@ -1640,6 +1727,7 @@ class VideoEditor extends Component {
                   <div className="grid grid-cols-2 gap-2">
                     <Button
                       variant="outline"
+                      disabled={this.state.analystTaskCreated}
                       className={`${hasPendingStart ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-emerald-500 text-emerald-600'} hover:bg-emerald-50`}
                       onClick={() => this.handleAddTag('involved_start')}
                     >
@@ -1650,7 +1738,7 @@ class VideoEditor extends Component {
                       variant="outline"
                       className="border-red-500 text-red-600 hover:bg-red-50"
                       onClick={() => this.handleAddTag('involved_end')}
-                      disabled={!hasPendingStart}
+                      disabled={!hasPendingStart || this.state.analystTaskCreated}
                     >
                       <Pause className="w-4 h-4 mr-2" />
                       End
@@ -1707,6 +1795,7 @@ class VideoEditor extends Component {
                             <Button
                               size="icon"
                               variant="ghost"
+                              disabled={this.state.analystTaskCreated}
                               className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50"
                               onClick={async () => {
                                 try {
@@ -1748,6 +1837,7 @@ class VideoEditor extends Component {
                           {!isPending && (
                             <Button
                               size="sm"
+                              disabled={this.state.analystTaskCreated}
                               className="w-full bg-blue-600 hover:bg-blue-700"
                               onClick={() => this.handleCreatePendingSegment(startTag, endTag)}
                             >
@@ -1789,7 +1879,7 @@ class VideoEditor extends Component {
                           <div className="w-3 h-3 bg-blue-600 rounded-full" />
                           <span className="text-blue-700 font-medium">#{idx + 1}</span>
                           <span className="text-slate-600">{this.formatTime(seg.start_time)} - {this.formatTime(seg.end_time)}</span>
-                          {seg.zone && <Badge variant="outline" className="text-xs capitalize">{seg.zone}</Badge>}
+                          {seg.zone && <Badge variant="outline" className="text-xs">{zones.find(z => z.id === seg.zone)?.label || seg.zone}</Badge>}
                         </div>
                       ))
                     )}
@@ -1803,7 +1893,7 @@ class VideoEditor extends Component {
                     disabled={pendingSegments.length === 0}
                   >
                     <CheckCircle2 className="w-4 h-4 mr-2" />
-                    Confirm All & Create Analyst Task ({pendingSegments.length})
+                    Confirm ({pendingSegments.length})
                   </Button>
                 </div>
               </div>
@@ -1836,13 +1926,19 @@ class VideoEditor extends Component {
                 {segments.map((segment, idx) => {
                   const zoneColors = {
                     defending: { border: 'border-red-500', bg: 'bg-red-50', gradient: 'from-red-600 to-red-800', badge: 'bg-red-500 text-white' },
-                    midfield: { border: 'border-amber-500', bg: 'bg-amber-50', gradient: 'from-amber-500 to-amber-700', badge: 'bg-amber-500 text-white' },
                     attacking: { border: 'border-emerald-500', bg: 'bg-emerald-50', gradient: 'from-emerald-600 to-emerald-800', badge: 'bg-emerald-500 text-white' },
-                    transition: { border: 'border-purple-500', bg: 'bg-purple-50', gradient: 'from-purple-600 to-purple-800', badge: 'bg-purple-500 text-white' }
+                    offensive_transition: { border: 'border-blue-500', bg: 'bg-blue-50', gradient: 'from-blue-600 to-blue-800', badge: 'bg-blue-500 text-white' },
+                    defensive_transition: { border: 'border-amber-500', bg: 'bg-amber-50', gradient: 'from-amber-600 to-amber-800', badge: 'bg-amber-500 text-white' }
+                  };
+                  const zoneLabels = {
+                    defending: 'Defending',
+                    attacking: 'Attacking',
+                    offensive_transition: 'Off Transition',
+                    defensive_transition: 'Def Transition'
                   };
                   const zone = segment.zone || 'defending';
                   const colors = zoneColors[zone] || zoneColors.defending;
-                  const zoneName = zone.charAt(0).toUpperCase() + zone.slice(1);
+                  const zoneName = zoneLabels[zone] || zone;
                   
                   return (
                   <div

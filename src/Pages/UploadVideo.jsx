@@ -136,33 +136,43 @@ class UploadVideo extends Component {
     this.setState({ error: '', step: 3 });
   };
 
-  handlePlayerInfoSubmit = () => {
+  handlePlayerInfoSubmit = async () => {
     const { videoData } = this.state;
     if (!videoData.player_name || !videoData.player_team) {
       this.setState({ error: 'Please fill in required player information.' });
       return;
     }
     this.setState({ error: '' });
-    this.extractFrames();
+    await this.createVideoAndExtractFrames();
   };
 
-  extractFrames = async () => {
+  createVideoAndExtractFrames = async () => {
     this.setState({ extractingFrames: true, step: 4 });
     
     try {
       const { videoData } = this.state;
+      
+      // Create video in database first
+      console.log('Creating video in database...');
+      const createdVideo = await videoService.create(videoData);
+      const videoId = createdVideo.id;
+      console.log('Video created with ID:', videoId);
+      
+      // Now extract frames with the video ID
       const fileUrl = videoData.file_url;
       console.log('Starting frame extraction from:', fileUrl);
       
-      const result = await actionAnnotationService.extractFrames(fileUrl);
+      const result = await actionAnnotationService.extractFrames(fileUrl, videoId);
       if (result && result.frames) {
         console.log(`Successfully extracted ${result.frames.length} frames from backend`);
         this.setState(prev => ({
           videoData: {
             ...prev.videoData,
-            sample_frames: result.frames.map((frame_url, index) => ({
-              timestamp: 0, // Backend doesn't return timestamps yet, could be improved
-              frame_url: frame_url,
+            id: videoId,
+            sample_frames: result.frames.map((frame, index) => ({
+              timestamp: 0,
+              frame_url: frame.url || `/api/frame/${frame.id}`,
+              frame_id: frame.id,
               annotation: null
             }))
           },
@@ -210,10 +220,11 @@ class UploadVideo extends Component {
     try {
       this.setState({ uploading: true });
       
-      const video = await videoService.create(this.state.videoData);
+      // Video was already created during frame extraction, just use it here
+      const videoId = this.state.videoData.id;
       
       await videoTaskService.create({
-        video_id: video.id,
+        video_id: videoId,
         task_type: 'video_processing',
         status: 'pending_processing',
         priority: 'medium',
