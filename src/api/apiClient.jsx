@@ -122,11 +122,11 @@ export const actionAnnotationService = {
     if (!response.ok) throw new Error('Failed to fetch annotations');
     return await response.json();
   },
-  async extractFrames(videoUrl, videoId) {
+  async extractFrames(videoUrl, videoId, matchStartTime = 0) {
     const response = await fetch(`${API_BASE_URL}/extract-frames`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url: videoUrl, video_id: videoId })
+      body: JSON.stringify({ url: videoUrl, video_id: videoId, match_start_time: matchStartTime })
     });
     if (!response.ok) throw new Error('Failed to extract frames');
     return await response.json();
@@ -142,8 +142,23 @@ export const actionAnnotationService = {
     if (!response.ok) throw new Error('Failed to create annotation');
     return await response.json();
   },
-  update: async (id, data) => data,
-  delete: async () => {}
+  update: async (id, data) => {
+    const response = await fetch(`${API_BASE_URL}/annotations/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    if (!response.ok) throw new Error('Failed to update annotation');
+    return await response.json();
+  },
+  delete: async (id) => {
+    const response = await fetch(`${API_BASE_URL}/annotations/${id}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    if (!response.ok) throw new Error('Failed to delete annotation');
+    return await response.json();
+  }
 };
 
 export const storageService = {
@@ -188,7 +203,18 @@ export const storageService = {
       xhr.send(formData);
     });
   },
-  getPublicUrl: (path) => path,
+  getPublicUrl: (path) => {
+    // If it's already a full URL, return as-is
+    if (path.startsWith('http://') || path.startsWith('https://')) {
+      return path;
+    }
+    // Backend serves videos from /videos/<filename>
+    // path is like "videos/1234567.mp4", convert to "/videos/1234567.mp4"
+    if (path.startsWith('videos/')) {
+      return `/${path}`;
+    }
+    return path;
+  },
   deleteFile: async () => {},
   downloadFile: async () => new Blob()
 };

@@ -1,5 +1,5 @@
 import React, { Component } from 'react';
-import { videoTagService, videoSegmentService, videoTaskService, videoService, storageService } from '../api/apiClient';
+import { videoTagService, videoSegmentService, videoTaskService, videoService, storageService, actionAnnotationService } from '../api/apiClient';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createPageUrl } from '../utils';
 import { Card, CardContent, CardHeader, CardTitle } from "../Components/ui/card";
@@ -54,6 +54,7 @@ class VideoEditor extends Component {
     super(props);
     
     this.videoRef = React.createRef();
+    this.videoContainerRef = React.createRef();
     this.popupWindowRef = React.createRef();
     
     this.state = {
@@ -67,6 +68,7 @@ class VideoEditor extends Component {
       isNewVideo: false,
       showCreateTaskDialog: false,
       taskPriority: 'medium',
+      timelineFrames: [],
       
       // Loading states
       allTasksLoading: true,
@@ -81,6 +83,7 @@ class VideoEditor extends Component {
       matchStartTime: 0,
       playUntilTime: null,
       playbackSpeed: 1,
+      isFullscreen: false,
       
       // UI state
       selectedZone: null,
@@ -110,6 +113,21 @@ class VideoEditor extends Component {
   componentDidMount() {
     this.loadData();
     this.setupPopupHandlers();
+    this.setupFullscreenHandlers();
+  }
+
+  setupFullscreenHandlers = () => {
+    const handleFullscreenChange = () => {
+      const isCurrentlyFullscreen = !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement);
+      this.setState({ isFullscreen: isCurrentlyFullscreen });
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+    document.addEventListener('mozfullscreenchange', handleFullscreenChange);
+    document.addEventListener('MSFullscreenChange', handleFullscreenChange);
+
+    this.handleFullscreenChange = handleFullscreenChange;
   }
 
   componentDidUpdate(prevProps, prevState) {
@@ -133,6 +151,16 @@ class VideoEditor extends Component {
 
   componentWillUnmount() {
     this.cleanupPopupHandlers();
+    this.cleanupFullscreenHandlers();
+  }
+
+  cleanupFullscreenHandlers = () => {
+    if (this.handleFullscreenChange) {
+      document.removeEventListener('fullscreenchange', this.handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', this.handleFullscreenChange);
+      document.removeEventListener('mozfullscreenchange', this.handleFullscreenChange);
+      document.removeEventListener('MSFullscreenChange', this.handleFullscreenChange);
+    }
   }
 
   setupPopupHandlers = () => {
@@ -330,9 +358,49 @@ class VideoEditor extends Component {
         }
         
         this.setState({ video, videoLoading: false, analystTaskCreated });
-        // Extract frames automatically when video is loaded
-        if (video.url) {
-          this.handleExtractFrames(video.url);
+        console.log('Video loaded:', video);
+        console.log('Video URL from backend:', video?.url);
+        console.log('Video file_url from backend:', video?.file_url);
+        console.log('Match start time from backend:', video?.match_start_time);
+        console.log('Sample frames in video:', video?.sample_frames);
+        
+        // If match_start_time is set, automatically seek to that position
+        if (video?.match_start_time && video.match_start_time > 0) {
+          console.log('Setting match start to:', video.match_start_time);
+          this.setState({ 
+            matchStartSet: true, 
+            matchStartTime: video.match_start_time 
+          }, () => {
+            // Seek to the match start time after state is updated
+            setTimeout(() => {
+              if (this.videoRef.current) {
+                this.videoRef.current.currentTime = video.match_start_time;
+                console.log('Seeked to match start time:', video.match_start_time);
+              }
+            }, 500);
+          });
+        }
+        
+        // Extract frames automatically when video is loaded only if sample_frames don't exist
+        if (video.url && (!video.sample_frames || video.sample_frames.length === 0)) {
+          console.log('Attempting to extract frames for video');
+          this.handleExtractFrames(video.url, video.id);
+        } else if (video.sample_frames && video.sample_frames.length > 0) {
+          console.log('Sample frames already exist in video, mapping URLs if needed');
+          // Ensure frames have frame_url and timestamp, preserve annotations
+          const framesWithUrls = video.sample_frames.map(frame => {
+            // Debug log to see frame structure
+            console.log('Processing frame:', frame);
+            return {
+              ...frame,
+              frame_url: frame.frame_url || (frame.frame_id ? `/api/frame/${frame.frame_id}` : `/api/frame/${frame.id}`),
+              timestamp: frame.timestamp || (frame.frame_index ? frame.frame_index / 30 : 0),
+              // Preserve annotation if it exists
+              annotation: frame.annotation || null
+            };
+          });
+          console.log('Frames with URLs ready:', framesWithUrls);
+          this.setState({ timelineFrames: framesWithUrls });
         }
       } else {
         this.setState({ videoLoading: false });
@@ -342,14 +410,48 @@ class VideoEditor extends Component {
     }
   };
 
-  handleExtractFrames = async (videoUrl) => {
+  handleExtractFrames = async (videoUrl, videoId) => {
     try {
-      const result = await actionAnnotationService.extractFrames(videoUrl);
-      if (result && result.frames) {
-        this.setState({ timelineFrames: result.frames });
+      if (!videoUrl) {
+        console.warn('No video URL provided for frame extraction');
+        return;
+      }
+      
+      if (!videoId) {
+        console.warn('No video ID provided for frame extraction');
+        return;
+      }
+      
+      console.log('Extracting frames with:', { videoUrl, videoId });
+      
+      const result = await actionAnnotationService.extractFrames(videoUrl, videoId);
+      console.log('Frames extracted successfully:', result);
+      
+      if (result && result.frames && result.frames.length > 0) {
+        // Map frames to include frame_url and preserve structure
+        const framesWithUrls = result.frames.map(frame => ({
+          frame_id: frame.id,
+          frame_index: frame.frame_index,
+          timestamp: frame.frame_index ? frame.frame_index / 30 : 0, // Assuming 30 fps, convert frame index to seconds
+          frame_url: `/api/frame/${frame.id}`,
+          width: frame.width,
+          height: frame.height,
+          annotation: null  // No annotations on fresh extraction
+        }));
+        
+        // Update both timelineFrames and merge into video object
+        this.setState(prevState => ({ 
+          timelineFrames: framesWithUrls,
+          video: {
+            ...prevState.video,
+            sample_frames: framesWithUrls
+          }
+        }));
+      } else {
+        console.warn('No frames returned from extraction');
       }
     } catch (error) {
-      console.error('Error extracting frames:', error);
+      console.error('Error extracting frames:', error, 'URL:', videoUrl, 'ID:', videoId);
     }
   };
 
@@ -427,8 +529,32 @@ class VideoEditor extends Component {
   };
 
   getMatchTime = (videoTime) => {
-    if (!this.state.matchStartSet) return videoTime;
-    return Math.max(0, videoTime - this.state.matchStartTime);
+    // CHANGED: Now returns absolute video time, not match-relative time
+    // This ensures segments are stored with correct absolute times
+    // and align properly in AnalystDashboard
+    return videoTime;
+  };
+
+  getVideoUrl = () => {
+    const { video } = this.state;
+    if (!video?.url && !video?.file_url) {
+      return '';
+    }
+    
+    let url = video.url || video.file_url;
+    
+    // If it's already a full URL (http/https), return as-is
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      return url;
+    }
+    
+    // If it already has a leading slash, return as-is
+    if (url.startsWith('/')) {
+      return url;
+    }
+    
+    // Otherwise add leading slash (path like "videos/file.mp4" becomes "/videos/file.mp4")
+    return `/${url}`;
   };
 
   handlePlayPause = () => {
@@ -444,14 +570,30 @@ class VideoEditor extends Component {
 
   handleSeek = (value) => {
     if (this.videoRef.current) {
-      this.videoRef.current.currentTime = value[0];
-      this.setState({ currentTime: value[0] });
+      const { matchStartTime, matchStartSet } = this.state;
+      let seekTime = value[0];
+      
+      // Add match start time offset if it's set
+      // because the slider value is relative to match start
+      if (matchStartSet && matchStartTime > 0) {
+        seekTime = seekTime + matchStartTime;
+      }
+      
+      this.videoRef.current.currentTime = seekTime;
+      this.setState({ currentTime: seekTime });
     }
   };
 
   handleSkip = (seconds) => {
     if (this.videoRef.current) {
-      const newTime = Math.max(0, Math.min(this.state.duration, this.videoRef.current.currentTime + seconds));
+      const { matchStartTime, matchStartSet, duration } = this.state;
+      let newTime = Math.max(0, Math.min(duration, this.videoRef.current.currentTime + seconds));
+      
+      // Prevent skipping before match start time
+      if (matchStartSet && matchStartTime > 0) {
+        newTime = Math.max(matchStartTime, newTime);
+      }
+      
       this.videoRef.current.currentTime = newTime;
       this.setState({ currentTime: newTime });
     }
@@ -461,6 +603,35 @@ class VideoEditor extends Component {
     if (this.videoRef.current) {
       this.videoRef.current.playbackRate = speed;
       this.setState({ playbackSpeed: speed });
+    }
+  };
+
+  handleFullscreen = () => {
+    const container = this.videoContainerRef.current;
+    if (!container) return;
+
+    const isCurrentlyFullscreen = !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement);
+
+    if (!isCurrentlyFullscreen) {
+      if (container.requestFullscreen) {
+        container.requestFullscreen().catch(err => console.error('Error attempting to enable fullscreen:', err));
+      } else if (container.webkitRequestFullscreen) {
+        container.webkitRequestFullscreen();
+      } else if (container.mozRequestFullScreen) {
+        container.mozRequestFullScreen();
+      } else if (container.msRequestFullscreen) {
+        container.msRequestFullscreen();
+      }
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen().catch(err => console.error('Error attempting to exit fullscreen:', err));
+      } else if (document.webkitExitFullscreen) {
+        document.webkitExitFullscreen();
+      } else if (document.mozCancelFullScreen) {
+        document.mozCancelFullScreen();
+      } else if (document.msExitFullscreen) {
+        document.msExitFullscreen();
+      }
     }
   };
 
@@ -1112,7 +1283,7 @@ class VideoEditor extends Component {
         if (popupWindow && !popupWindow.closed) {
           popupWindow.postMessage({ 
             type: 'UPDATE_TIME', 
-            time: this.getMatchTime(this.state.currentTime) 
+            time: this.state.currentTime  // Send absolute video time directly
           }, '*');
           requestAnimationFrame(updatePopup);
         }
@@ -1163,6 +1334,10 @@ class VideoEditor extends Component {
       playUntilTime,
       notification
     } = this.state;
+
+    // Calculate effective duration and time offset for display when match start time is set
+    const displayDuration = matchStartSet && matchStartTime > 0 ? duration - matchStartTime : duration;
+    const displayCurrentTime = matchStartSet && matchStartTime > 0 ? currentTime - matchStartTime : currentTime;
 
     const involvedStarts = tags.filter(t => t.tag_type === 'involved_start');
     const involvedEnds = tags.filter(t => t.tag_type === 'involved_end');
@@ -1426,23 +1601,23 @@ class VideoEditor extends Component {
             </p>
           </div>
           <div className="flex items-center gap-3">
-            {video?.sample_frames && video.sample_frames.length > 0 && (
-              <Button
-                onClick={() => this.setState({ showGallery: true })}
-                variant="outline"
-                className="gap-2"
-              >
-                <User className="w-4 h-4" />
-                View Player Identification Gallery
+            <Button
+              onClick={() => this.setState({ showGallery: true })}
+              variant="outline"
+              className="gap-2"
+            >
+              <User className="w-4 h-4" />
+              View Player Identification Gallery
+              {video?.sample_frames && video.sample_frames.length > 0 && (
                 <span className="ml-1 px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded text-xs">
                   {video.sample_frames.filter(f => f.annotation).length}/{video.sample_frames.length}
                 </span>
-              </Button>
-            )}
+              )}
+            </Button>
             {task && (
               <>
                 <Button 
-                  onClick={() => this.setState({ showTaggingDialog: true })}
+                  onClick={this.handlePopOutDashboard}
                   disabled={this.state.analystTaskCreated}
                   className={this.state.analystTaskCreated ? "bg-gray-400 cursor-not-allowed" : "bg-emerald-600 hover:bg-emerald-700"}
                 >
@@ -1475,14 +1650,22 @@ class VideoEditor extends Component {
         </div>
 
         {/* Video Player */}
-        <Card className="overflow-hidden border-0 shadow-lg">
+        <Card className={`overflow-hidden border-0 shadow-lg ${this.state.isFullscreen ? 'video-player-fullscreen' : ''}`} ref={this.videoContainerRef}>
           <div className="bg-black relative">
             <video
               ref={this.videoRef}
-              src={video?.url ? (video.url.startsWith('http') ? video.url : `/${video.url}`) : video?.file_url}
-              className="w-full h-[400px] lg:h-[500px] object-contain"
+              src={this.getVideoUrl()}
+              className={`w-full object-contain ${this.state.isFullscreen ? 'flex-1' : 'h-[500px] lg:h-[600px]'}`}
               onTimeUpdate={() => {
-                const currentTime = this.videoRef.current?.currentTime || 0;
+                const { matchStartTime, matchStartSet, playUntilTime } = this.state;
+                let currentTime = this.videoRef.current?.currentTime || 0;
+                
+                // Enforce match start time - prevent playback before this time
+                if (matchStartSet && matchStartTime > 0 && currentTime < matchStartTime) {
+                  this.videoRef.current.currentTime = matchStartTime;
+                  currentTime = matchStartTime;
+                }
+                
                 this.setState({ currentTime });
 
                 if (playUntilTime !== null && this.getMatchTime(currentTime) >= playUntilTime) {
@@ -1497,7 +1680,12 @@ class VideoEditor extends Component {
               }}
               onPlay={() => this.setState({ isPlaying: true })}
               onPause={() => this.setState({ isPlaying: false })}
-              onError={(e) => console.error("Video player error:", e)}
+              onError={(e) => {
+                const videoUrl = this.getVideoUrl();
+                console.error("Video player error:", e);
+                console.error("Video URL being loaded:", videoUrl);
+                console.error("Video element src:", this.videoRef.current?.src);
+              }}
             />
 
             {/* Time Overlay */}
@@ -1505,17 +1693,17 @@ class VideoEditor extends Component {
               {matchStartSet && (
                 <span className="text-emerald-400 mr-2">Match:</span>
               )}
-              {this.formatTime(this.getMatchTime(currentTime))}
+              {this.formatTime(displayCurrentTime)}
             </div>
           </div>
 
           {/* Controls */}
-          <CardContent className="p-4 bg-slate-900 space-y-4">
+          <CardContent className={`${this.state.isFullscreen ? 'p-3 bg-slate-900/95 w-full' : 'p-4 space-y-4'} bg-slate-900`}>
             {/* Playback Timeline */}
-            <div className="relative">
+            <div className={`relative ${this.state.isFullscreen ? 'mb-2' : 'mb-4'}`}>
               <Slider
-                value={[currentTime]}
-                max={duration}
+                value={[displayCurrentTime]}
+                max={displayDuration}
                 step={0.1}
                 onValueChange={this.handleSeek}
                 className="w-full"
@@ -1525,15 +1713,15 @@ class VideoEditor extends Component {
                   key={seg.id}
                   className="absolute top-0 h-2 bg-emerald-500/50 rounded"
                   style={{
-                    left: `${((seg.start_time + matchStartTime) / duration) * 100}%`,
-                    width: `${((seg.end_time - seg.start_time) / duration) * 100}%`
+                    left: `${((seg.start_time - (matchStartSet && matchStartTime > 0 ? matchStartTime : 0)) / displayDuration) * 100}%`,
+                    width: `${((seg.end_time - seg.start_time) / displayDuration) * 100}%`
                   }}
                 />
               ))}
             </div>
 
             {/* Playback Controls */}
-            <div className="flex items-center justify-between">
+            <div className={`flex items-center w-full ${this.state.isFullscreen ? 'gap-2 flex-wrap justify-center' : 'gap-4 justify-between'}`}>
               <div className="flex items-center gap-2">
                 <Button size="icon" variant="ghost" onClick={() => this.handleSkip(-10)} className="text-white hover:bg-white/20">
                   <SkipBack className="w-5 h-5" />
@@ -1552,13 +1740,15 @@ class VideoEditor extends Component {
                 </Button>
               </div>
 
-              <div className="flex items-center gap-4">
+              <div className={`flex items-center ${this.state.isFullscreen ? 'gap-1' : 'gap-4'}`}>
+                {!this.state.isFullscreen && (
                 <div className="text-white font-mono text-sm">
-                  {this.formatTime(currentTime)} / {this.formatTime(duration)}
+                  {this.formatTime(displayCurrentTime)} / {this.formatTime(displayDuration)}
                 </div>
+                )}
 
                 {/* Playback Speed Control */}
-                <div className="flex items-center gap-1 bg-white/10 rounded-lg p-1">
+                <div className={`flex items-center gap-1 bg-white/10 rounded-lg p-1 ${this.state.isFullscreen ? 'hidden md:flex' : ''}`}>
                   {[0.5, 0.75, 1, 1.25, 1.5, 2].map(speed => (
                     <Button
                       key={speed}
@@ -1571,9 +1761,20 @@ class VideoEditor extends Component {
                     </Button>
                   ))}
                 </div>
+
+                {/* Fullscreen Button */}
+                <Button 
+                  size="icon" 
+                  variant="ghost" 
+                  onClick={this.handleFullscreen}
+                  className="text-white hover:bg-white/20"
+                  title="Fullscreen"
+                >
+                  <Maximize2 className="w-5 h-5" />
+                </Button>
               </div>
 
-              {!matchStartSet && (
+              {!matchStartSet && !this.state.isFullscreen && (
                 <Button onClick={this.handleSetMatchStart} className="bg-emerald-600 hover:bg-emerald-700">
                   <Flag className="w-4 h-4 mr-2" />
                   Set Match Start
@@ -1582,21 +1783,22 @@ class VideoEditor extends Component {
             </div>
 
             {/* Player Segments Timeline */}
+            {!this.state.isFullscreen && (
             <div className="pt-4 border-t border-slate-700">
               <EnhancedTimeline
                 segments={segments}
-                duration={duration}
-                currentTime={this.getMatchTime(currentTime)}
+                duration={displayDuration}
+                currentTime={displayCurrentTime}
                 matchStartTime={matchStartTime}
                 readOnly={this.state.analystTaskCreated}
                 onSeek={(time) => {
                   if (this.videoRef.current) {
-                    this.videoRef.current.currentTime = time + matchStartTime;
+                    this.videoRef.current.currentTime = time + (matchStartSet && matchStartTime > 0 ? matchStartTime : 0);
                   }
                 }}
                 onPlaySegment={(segment) => {
                   if (this.videoRef.current) {
-                    this.videoRef.current.currentTime = segment.start_time + matchStartTime;
+                    this.videoRef.current.currentTime = segment.start_time;
                     this.videoRef.current.play();
                     this.setState({ isPlaying: true, playUntilTime: segment.end_time });
                   }
@@ -1647,14 +1849,15 @@ class VideoEditor extends Component {
                 } : undefined}
               />
             </div>
+            )}
           </CardContent>
         </Card>
 
         {/* Player Identification Gallery */}
-        {showGallery && video?.sample_frames && (
+        {showGallery && (video?.sample_frames || this.state.timelineFrames) && (
           <PlayerIdentificationGallery
-            frames={video.sample_frames}
-            playerName={video.player_name}
+            frames={video?.sample_frames || this.state.timelineFrames}
+            playerName={video?.player_name}
             onClose={() => this.setState({ showGallery: false })}
           />
         )}
@@ -1946,7 +2149,7 @@ class VideoEditor extends Component {
                     className={`relative group cursor-pointer rounded-lg overflow-hidden border-2 ${colors.border} ${colors.bg} transition-all hover:scale-105 hover:shadow-lg`}
                     onClick={() => {
                       if (this.videoRef.current) {
-                        this.videoRef.current.currentTime = segment.start_time + matchStartTime;
+                        this.videoRef.current.currentTime = segment.start_time;
                         this.videoRef.current.play();
                         this.setState({ isPlaying: true, playUntilTime: segment.end_time });
                       }
@@ -1955,7 +2158,12 @@ class VideoEditor extends Component {
                     <Button
                       size="icon"
                       variant="ghost"
-                      className="absolute top-1 right-1 h-6 w-6 bg-red-500/90 hover:bg-red-600 text-white opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                      disabled={this.state.analystTaskCreated}
+                      className={`absolute top-2 right-2 h-8 w-8 text-white invisible group-hover:visible transition-all z-50 ${
+                        this.state.analystTaskCreated 
+                          ? 'bg-gray-500 hover:bg-gray-500 cursor-not-allowed shadow-lg' 
+                          : 'bg-red-600 hover:bg-red-700 shadow-lg'
+                      }`}
                       onClick={async (e) => {
                         e.stopPropagation();
                         try {
@@ -1982,7 +2190,7 @@ class VideoEditor extends Component {
                         } catch (error) {}
                       }}
                     >
-                      <Trash2 className="w-3 h-3" />
+                      <Trash2 className="w-4 h-4" />
                     </Button>
 
                     <div className={`w-40 h-24 bg-gradient-to-br ${colors.gradient} relative flex items-center justify-center`}>

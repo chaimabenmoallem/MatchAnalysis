@@ -10,6 +10,7 @@ import {
   Play
 } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from "../../Components/ui/popover";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "../../Components/ui/dialog";
 
 export default function EnhancedTimeline({ 
   segments = [], 
@@ -25,6 +26,8 @@ export default function EnhancedTimeline({
 }) {
   const [editingSegment, setEditingSegment] = useState(null);
   const [dragState, setDragState] = useState(null);
+  const [, setResizeUpdate] = useState(0);
+  const [deleteConfirmation, setDeleteConfirmation] = useState(null);
   const timelineRef = useRef(null);
 
   // Dynamically determine time interval based on duration
@@ -32,15 +35,28 @@ export default function EnhancedTimeline({
     if (duration < 300) return 30; // < 5 min: every 30 seconds
     if (duration < 1800) return 120; // < 30 min: every 2 minutes
     if (duration < 3600) return 300; // < 60 min: every 5 minutes
-    return 300; // >= 60 min: every 5 minutes
+    if (duration < 5400) return 600; // < 90 min: every 10 minutes
+    return 900; // >= 90 min: every 15 minutes
   };
 
   const timeInterval = getTimeInterval();
 
   const formatTime = (seconds) => {
-    const m = Math.floor(seconds / 60);
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
     const s = Math.floor(seconds % 60);
-    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
+
+  const parseTimeToSeconds = (timeString) => {
+    const parts = timeString.split(':');
+    if (parts.length === 3) {
+      const hours = parseInt(parts[0], 10) || 0;
+      const minutes = parseInt(parts[1], 10) || 0;
+      const seconds = parseFloat(parts[2]) || 0;
+      return hours * 3600 + minutes * 60 + seconds;
+    }
+    return 0;
   };
 
   const timeToPixels = (time) => {
@@ -108,6 +124,21 @@ export default function EnhancedTimeline({
     };
   }, [dragState, duration, onUpdateSegment]);
 
+  // Monitor timeline container size changes (for fullscreen toggle)
+  useEffect(() => {
+    const observer = new ResizeObserver(() => {
+      setResizeUpdate(prev => prev + 1);
+    });
+
+    if (timelineRef.current) {
+      observer.observe(timelineRef.current);
+    }
+
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
+
   const zoneColors = {
     defending: { bg: 'bg-red-500', text: 'text-red-700', border: 'border-red-500', label: 'Defending' },
     attacking: { bg: 'bg-emerald-500', text: 'text-emerald-700', border: 'border-emerald-500', label: 'Attacking' },
@@ -172,12 +203,16 @@ export default function EnhancedTimeline({
                     const rect = e.currentTarget.getBoundingClientRect();
                     const x = e.clientX - rect.left;
                     const time = pixelsToTime(x);
-                    onSeek(time);
+                    // When seeking, add back the match start time if it was set
+                    onSeek(matchStartTime > 0 ? time + matchStartTime : time);
                   }}>
                     {/* Render inline segments */}
                     {zoneSegments.map((seg) => {
-                      const left = timeToPixels(seg.start_time);
-                      const width = timeToPixels(seg.end_time - seg.start_time);
+                      // Adjust segment times by subtracting match start time for display
+                      const displayStartTime = matchStartTime > 0 ? Math.max(0, seg.start_time - matchStartTime) : seg.start_time;
+                      const displayEndTime = matchStartTime > 0 ? Math.max(0, seg.end_time - matchStartTime) : seg.end_time;
+                      const left = timeToPixels(displayStartTime);
+                      const width = timeToPixels(displayEndTime - displayStartTime);
 
                       return (
                         <div
@@ -209,7 +244,7 @@ export default function EnhancedTimeline({
                           {/* Segment label */}
                           <div className="absolute inset-0 flex items-center justify-center">
                             <span className="text-xs text-white font-medium px-2 truncate">
-                              {formatTime(seg.start_time)} - {formatTime(seg.end_time)}
+                              {formatTime(displayStartTime)} - {formatTime(displayEndTime)}
                             </span>
                           </div>
 
@@ -236,33 +271,74 @@ export default function EnhancedTimeline({
                                     variant="ghost" 
                                     disabled={readOnly}
                                     className={`h-6 w-6 ${readOnly ? 'text-gray-400 cursor-not-allowed' : ''}`}
+                                    onClick={(e) => e.stopPropagation()}
                                   >
                                     <Pencil className="w-3 h-3" />
                                   </Button>
                                 </PopoverTrigger>
-                                <PopoverContent className="w-64">
+                                <PopoverContent className="w-64" onClick={(e) => e.stopPropagation()}>
                                   <div className="space-y-3">
                                     <div>
                                       <label className="text-xs font-medium">Start Time</label>
-                                      <Input
-                                        type="number"
-                                        step="0.1"
-                                        disabled={readOnly}
-                                        value={seg.start_time.toFixed(1)}
-                                        onChange={(e) => !readOnly && onUpdateSegment(seg.id, { start_time: parseFloat(e.target.value) })}
-                                        className="h-7 text-xs"
-                                      />
+                                      <div className="flex items-center gap-1">
+                                        <Button
+                                          size="icon"
+                                          variant="outline"
+                                          className="h-7 w-7"
+                                          disabled={readOnly}
+                                          onClick={() => !readOnly && onUpdateSegment(seg.id, { start_time: Math.max(0, seg.start_time - 1) })}
+                                        >
+                                          −
+                                        </Button>
+                                        <Input
+                                          type="text"
+                                          disabled={readOnly}
+                                          value={formatTime(seg.start_time)}
+                                          onChange={(e) => !readOnly && onUpdateSegment(seg.id, { start_time: parseTimeToSeconds(e.target.value) })}
+                                          placeholder="HH:MM:SS"
+                                          className="h-7 text-xs flex-1"
+                                        />
+                                        <Button
+                                          size="icon"
+                                          variant="outline"
+                                          className="h-7 w-7"
+                                          disabled={readOnly}
+                                          onClick={() => !readOnly && onUpdateSegment(seg.id, { start_time: seg.start_time + 1 })}
+                                        >
+                                          +
+                                        </Button>
+                                      </div>
                                     </div>
                                     <div>
                                       <label className="text-xs font-medium">End Time</label>
-                                      <Input
-                                        type="number"
-                                        step="0.1"
-                                        disabled={readOnly}
-                                        value={seg.end_time.toFixed(1)}
-                                        onChange={(e) => !readOnly && onUpdateSegment(seg.id, { end_time: parseFloat(e.target.value) })}
-                                        className="h-7 text-xs"
-                                      />
+                                      <div className="flex items-center gap-1">
+                                        <Button
+                                          size="icon"
+                                          variant="outline"
+                                          className="h-7 w-7"
+                                          disabled={readOnly}
+                                          onClick={() => !readOnly && onUpdateSegment(seg.id, { end_time: Math.max(0, seg.end_time - 1) })}
+                                        >
+                                          −
+                                        </Button>
+                                        <Input
+                                          type="text"
+                                          disabled={readOnly}
+                                          value={formatTime(seg.end_time)}
+                                          onChange={(e) => !readOnly && onUpdateSegment(seg.id, { end_time: parseTimeToSeconds(e.target.value) })}
+                                          placeholder="HH:MM:SS"
+                                          className="h-7 text-xs flex-1"
+                                        />
+                                        <Button
+                                          size="icon"
+                                          variant="outline"
+                                          className="h-7 w-7"
+                                          disabled={readOnly}
+                                          onClick={() => !readOnly && onUpdateSegment(seg.id, { end_time: seg.end_time + 1 })}
+                                        >
+                                          +
+                                        </Button>
+                                      </div>
                                     </div>
                                     <div>
                                       <label className="text-xs font-medium">Notes</label>
@@ -284,8 +360,8 @@ export default function EnhancedTimeline({
                                 className={`h-6 w-6 ${readOnly ? 'text-gray-400 cursor-not-allowed' : 'text-red-500 hover:text-red-700'}`}
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  if (onDeleteSegment && !readOnly) {
-                                    onDeleteSegment(seg.id);
+                                  if (!readOnly) {
+                                    setDeleteConfirmation(seg.id);
                                   }
                                 }}
                               >
@@ -321,6 +397,37 @@ export default function EnhancedTimeline({
           </div>
         </div>
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={!!deleteConfirmation} onOpenChange={(open) => !open && setDeleteConfirmation(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Segment?</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this segment? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-3 mt-6">
+            <Button
+              variant="outline"
+              onClick={() => setDeleteConfirmation(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (onDeleteSegment && deleteConfirmation) {
+                  onDeleteSegment(deleteConfirmation);
+                  setDeleteConfirmation(null);
+                }
+              }}
+            >
+              Delete
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

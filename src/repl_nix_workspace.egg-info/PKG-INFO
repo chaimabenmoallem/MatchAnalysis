@@ -1,0 +1,15 @@
+Metadata-Version: 2.4
+Name: repl-nix-workspace
+Version: 0.1.0
+Summary: Add your description here
+Requires-Python: >=3.11
+Requires-Dist: flask>=3.1.2
+Requires-Dist: flask-cors>=6.0.2
+Requires-Dist: flask-sqlalchemy>=3.1.1
+Requires-Dist: numpy>=2.4.1
+Requires-Dist: opencv-python>=4.13.0.90
+Requires-Dist: opencv-python-headless>=4.13.0.90
+Requires-Dist: psycopg2-binary>=2.9.11
+Requires-Dist: python-dotenv>=1.2.1
+Requires-Dist: requests>=2.32.5
+Requires-Dist: ffmpeg-python==0.2.0

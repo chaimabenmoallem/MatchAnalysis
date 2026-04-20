@@ -40,9 +40,10 @@ class Video(db.Model):
     away_team = db.Column(db.String(100))
     player_name = db.Column(db.String(100))
     jersey_number = db.Column(db.String(20))
-    sample_frames = db.Column(db.Text)
+    _sample_frames = db.Column('sample_frames', db.Text)
+    match_start_time = db.Column(db.Integer, default=0)  # Trim point in seconds
 
-    def __init__(self, id, title, url=None, status='pending', home_team=None, away_team=None, player_name=None, jersey_number=None, sample_frames=None):
+    def __init__(self, id, title, url=None, status='pending', home_team=None, away_team=None, player_name=None, jersey_number=None, sample_frames=None, match_start_time=0):
         self.id = id
         self.title = title
         self.url = url
@@ -51,15 +52,43 @@ class Video(db.Model):
         self.away_team = away_team
         self.player_name = player_name
         self.jersey_number = jersey_number
-        self.sample_frames = json.dumps(sample_frames) if sample_frames else None
+        self.sample_frames = sample_frames  # Use property setter
+        self.match_start_time = match_start_time
     
-    def get_sample_frames(self):
-        if self.sample_frames:
+    @property
+    def sample_frames(self):
+        """Return parsed sample frames"""
+        if self._sample_frames:
             try:
-                return json.loads(self.sample_frames)
+                return json.loads(self._sample_frames)
             except:
                 return []
         return []
+    
+    @sample_frames.setter
+    def sample_frames(self, value):
+        """Automatically convert to JSON string"""
+        print(f"[DEBUG SETTER] sample_frames setter called with type: {type(value)}")
+        if value is None:
+            self._sample_frames = None
+            print(f"[DEBUG SETTER] Set to None")
+        elif isinstance(value, str):
+            # Verify it's valid JSON or encode it
+            try:
+                json.loads(value)
+                self._sample_frames = value
+                print(f"[DEBUG SETTER] Valid JSON string, stored as-is")
+            except (json.JSONDecodeError, ValueError) as e:
+                self._sample_frames = json.dumps(value)
+                print(f"[DEBUG SETTER] Invalid JSON string, re-encoded: {e}")
+        else:
+            # Convert dict/list/etc to JSON string
+            self._sample_frames = json.dumps(value)
+            print(f"[DEBUG SETTER] Converted {type(value)} to JSON string")
+    
+    def get_sample_frames(self):
+        """Alias for sample_frames property"""
+        return self.sample_frames
 
 class ActionAnnotation(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -237,16 +266,27 @@ def upload_file():
 
 @app.route('/api/videos', methods=['GET'])
 def get_videos():
+    def normalize_url(url):
+        """Ensure URL starts with /"""
+        if not url:
+            return ''
+        if url.startswith('http'):
+            return url
+        if url.startswith('/'):
+            return url
+        return f'/{url}'
+    
     videos = Video.query.all()
     return jsonify([{
         'id': v.id,
         'title': v.title,
-        'url': v.url,
+        'url': normalize_url(v.url),
         'status': v.status,
         'home_team': v.home_team,
         'away_team': v.away_team,
         'player_name': v.player_name,
         'jersey_number': v.jersey_number,
+        'match_start_time': v.match_start_time,
         'sample_frames': v.get_sample_frames(),
         'created_at': v.created_at.isoformat()
     } for v in videos])
@@ -269,7 +309,8 @@ def create_video():
             away_team=data.get('away_team'),
             player_name=data.get('player_name'),
             jersey_number=data.get('jersey_number'),
-            sample_frames=data.get('sample_frames')
+            sample_frames=data.get('sample_frames'),
+            match_start_time=data.get('match_start_time', 0)  # Save the trim point
         )
         db.session.add(video)
         db.session.commit()
@@ -286,6 +327,81 @@ def create_video():
         import traceback
         traceback.print_exc()
         print(f"[ERROR] Failed to create video: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/videos/<video_id>', methods=['PUT'])
+def update_video(video_id):
+    try:
+        video = Video.query.filter_by(id=video_id).first()
+        if not video:
+            return jsonify({'error': f'Video with ID {video_id} not found'}), 404
+        
+        data = request.json
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+        
+        # Helper function to ensure string is JSON
+        def ensure_json_string(value):
+            print(f"[DEBUG ensure_json_string] Input type: {type(value)}")
+            if value is None:
+                print(f"[DEBUG ensure_json_string] Returning None")
+                return None
+            if isinstance(value, str):
+                # Verify it's valid JSON
+                try:
+                    json.loads(value)
+                    print(f"[DEBUG ensure_json_string] Valid JSON string, returning as-is")
+                    return value
+                except (json.JSONDecodeError, ValueError) as e:
+                    result = json.dumps(value)
+                    print(f"[DEBUG ensure_json_string] Invalid JSON string, encoded to: {result[:100]}")
+                    return result
+            else:
+                # dict, list, or other - convert to JSON string
+                result = json.dumps(value)
+                print(f"[DEBUG ensure_json_string] Converted {type(value)} to JSON: {result[:100]}")
+                return result
+        
+        # Update fields if provided
+        if 'title' in data:
+            video.title = data['title']
+        
+        if 'sample_frames' in data:
+            print(f"[DEBUG] Received sample_frames type: {type(data['sample_frames'])}")
+            video.sample_frames = ensure_json_string(data['sample_frames'])
+            print(f"[DEBUG] After assignment, _sample_frames type: {type(video._sample_frames)}")
+            print(f"[DEBUG] Raw _sample_frames (first 200 chars): {str(video._sample_frames)[:200]}")
+        
+        if 'status' in data:
+            video.status = data['status']
+        if 'home_team' in data:
+            video.home_team = data['home_team']
+        if 'away_team' in data:
+            video.away_team = data['away_team']
+        if 'player_name' in data:
+            video.player_name = data['player_name']
+        if 'jersey_number' in data:
+            video.jersey_number = data['jersey_number']
+        if 'match_start_time' in data:
+            video.match_start_time = data['match_start_time']
+        
+        # Double-check before commit - check the RAW column value, not the property getter
+        assert isinstance(video._sample_frames, (str, type(None))), f"_sample_frames must be string or None, but is {type(video._sample_frames)}"
+        
+        db.session.commit()
+        print(f"[DEBUG] Video {video_id} updated successfully")
+        return jsonify({
+            'id': video.id,
+            'title': video.title,
+            'url': video.url,
+            'status': video.status,
+            'sample_frames': video.get_sample_frames()
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        import traceback
+        traceback.print_exc()
+        print(f"[ERROR] Failed to update video: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 class VideoTask(db.Model):
@@ -459,12 +575,84 @@ def get_annotations(video_id):
         'created_at': a.created_at.isoformat() if a.created_at else None
     } for a in annotations])
 
+@app.route('/api/annotations/<int:annotation_id>', methods=['PUT'])
+def update_annotation(annotation_id):
+    try:
+        data = request.json
+        annotation = ActionAnnotation.query.filter_by(id=annotation_id).first()
+        if not annotation:
+            return jsonify({'error': 'Annotation not found'}), 404
+        
+        print(f"[API] Updating annotation {annotation_id} with data keys: {data.keys()}")
+        
+        # Update all fields
+        annotation.video_id = data.get('video_id', annotation.video_id)
+        annotation.start_time = data.get('start_time', annotation.start_time)
+        annotation.end_time = data.get('end_time', annotation.end_time)
+        annotation.action_category = data.get('action_category', annotation.action_category)
+        annotation.note = data.get('note', annotation.note)
+        # Pitch position
+        annotation.pitch_start_x = data.get('pitch_start_x', annotation.pitch_start_x)
+        annotation.pitch_start_y = data.get('pitch_start_y', annotation.pitch_start_y)
+        annotation.pitch_end_x = data.get('pitch_end_x', annotation.pitch_end_x)
+        annotation.pitch_end_y = data.get('pitch_end_y', annotation.pitch_end_y)
+        # Outcome and context
+        annotation.outcome = data.get('outcome', annotation.outcome)
+        annotation.context = data.get('context', annotation.context)
+        # General action details
+        annotation.pass_length = data.get('pass_length', annotation.pass_length)
+        annotation.pass_direction = data.get('pass_direction', annotation.pass_direction)
+        # Shot/Goal details
+        annotation.shot_result = data.get('shot_result', annotation.shot_result)
+        annotation.goal_target_x = data.get('goal_target_x', annotation.goal_target_x)
+        annotation.goal_target_y = data.get('goal_target_y', annotation.goal_target_y)
+        # Player action details
+        annotation.body_part = data.get('body_part', annotation.body_part)
+        annotation.defensive_pressure = data.get('defensive_pressure', annotation.defensive_pressure)
+        annotation.opponents_bypassed = data.get('opponents_bypassed', annotation.opponents_bypassed)
+        # Defensive specific
+        annotation.defensive_action_type = data.get('defensive_action_type', annotation.defensive_action_type)
+        annotation.defensive_consequence = data.get('defensive_consequence', annotation.defensive_consequence)
+        
+        db.session.commit()
+        print(f"[API] Annotation {annotation_id} updated successfully")
+        return jsonify({'id': annotation.id}), 200
+    except Exception as e:
+        db.session.rollback()
+        error_msg = str(e)
+        print(f"[API ERROR] Failed to update annotation: {error_msg}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': error_msg}), 500
+
+@app.route('/api/annotations/<int:annotation_id>', methods=['DELETE'])
+def delete_annotation(annotation_id):
+    try:
+        annotation = ActionAnnotation.query.filter_by(id=annotation_id).first()
+        if not annotation:
+            return jsonify({'error': 'Annotation not found'}), 404
+        
+        print(f"[API] Deleting annotation {annotation_id}")
+        db.session.delete(annotation)
+        db.session.commit()
+        print(f"[API] Annotation {annotation_id} deleted successfully")
+        return jsonify({'success': True}), 200
+    except Exception as e:
+        db.session.rollback()
+        error_msg = str(e)
+        print(f"[API ERROR] Failed to delete annotation: {error_msg}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': error_msg}), 500
+
 @app.route('/api/extract-frames', methods=['POST'])
 def extract_frames():
     try:
         data = request.json
         video_url = data.get('url')
         video_id = data.get('video_id')
+        match_start_time = data.get('match_start_time', 0)  # Start time in seconds
+        
         if not video_url:
             return jsonify({'error': 'Video URL required'}), 400
         if not video_id:
@@ -476,6 +664,7 @@ def extract_frames():
             return jsonify({'error': f'Video with ID {video_id} not found in database'}), 404
         
         print(f"[DEBUG] Extracting frames for video ID: {video_id}")
+        print(f"[DEBUG] Match start time: {match_start_time} seconds")
         
         # Delete existing frames for this video first
         VideoFrame.query.filter_by(video_id=video_id).delete()
@@ -498,27 +687,56 @@ def extract_frames():
                 local_path = temp_path
             else:
                 return jsonify({'error': f'Failed to download video'}), 400
+        
         cap = cv2.VideoCapture(local_path)
         if not cap.isOpened():
             return jsonify({'error': 'OpenCV could not open video'}), 400
+        
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        
         if total_frames <= 0:
             ret, _ = cap.read()
             if not ret:
                 return jsonify({'error': 'Invalid video file'}), 400
             total_frames = 1000
-        frames = []
-        start_frame = int(total_frames * 0.05)
+        
+        # Convert match_start_time (seconds) to frame number
+        start_frame_from_time = int(match_start_time * fps) if fps > 0 else int(match_start_time * 30)  # Default to 30fps if unavailable
+        print(f"[DEBUG] Start frame from match_start_time: {start_frame_from_time}")
+        print(f"[DEBUG] Total frames in video: {total_frames}")
+        
+        # Set the frame range based on whether match_start_time was provided
+        if match_start_time > 0:
+            # If match start time is set, use it as the actual starting point
+            start_frame = start_frame_from_time
+        else:
+            # Otherwise, start from 5% of the video (original behavior)
+            start_frame = int(total_frames * 0.05)
+        
+        # End frame is normally at 95% of video
         end_frame = int(total_frames * 0.95)
+        
+        # If start_frame is already past 95%, extend end_frame to the actual end of video
+        if start_frame >= end_frame:
+            print(f"[DEBUG] Start frame ({start_frame}) is past 95% mark ({end_frame}), extending to end of video")
+            end_frame = total_frames - 1
+        
         usable_range = max(1, end_frame - start_frame)
+        
+        print(f"[DEBUG] Frame range - Start: {start_frame}, End: {end_frame}, Total usable: {usable_range}")
+        
+        frames = []
         for i in range(10):
             frame_idx = start_frame + int((i * usable_range) / 9)
             cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
             ret, frame = cap.read()
             if ret:
-                frame = cv2.resize(frame, (480, 270))
+                # Resize to HD quality (1280x720) instead of low resolution
+                frame = cv2.resize(frame, (1280, 720))
                 height, width = frame.shape[:2]
-                _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+                # Increase JPEG quality from 85 to 95 for better image quality
+                _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
                 frame_id = str(uuid.uuid4())
                 
                 # Save frame to database

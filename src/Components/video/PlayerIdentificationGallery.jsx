@@ -78,7 +78,18 @@ export default function PlayerIdentificationGallery({ frames, playerName, onClos
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
-  const currentFrame = frames[currentIndex];
+  const currentFrame = frames?.[currentIndex];
+
+  if (!frames || frames.length === 0) {
+    return (
+      <div className="fixed inset-0 z-[100] bg-black flex items-center justify-center" onClick={onClose}>
+        <div className="text-center text-white" onClick={(e) => e.stopPropagation()}>
+          <p className="mb-4 text-lg">No frames available</p>
+          <Button onClick={onClose} variant="outline">Close</Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-[100] bg-black" onClick={onClose}>
@@ -112,13 +123,19 @@ export default function PlayerIdentificationGallery({ frames, playerName, onClos
 
         {/* Main image */}
         <div ref={containerRef} className="relative w-full h-full flex items-center justify-center p-4">
-          <img
-            ref={imageRef}
-            src={currentFrame.frame_url}
-            alt={`Frame ${currentIndex + 1}`}
-            className="w-full h-full object-contain"
-            onLoad={calculateImageRect}
-          />
+          {currentFrame?.frame_url ? (
+            <img
+              ref={imageRef}
+              src={currentFrame.frame_url}
+              alt={`Frame ${currentIndex + 1}`}
+              className="w-full h-full object-contain"
+              onLoad={calculateImageRect}
+            />
+          ) : (
+            <div className="text-white text-center">
+              <p>Frame data not available</p>
+            </div>
+          )}
 
           {/* Annotation marker */}
           {currentFrame.annotation && imageRect && (

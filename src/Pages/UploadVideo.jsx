@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "../Components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../Components/ui/select";
 import { Progress } from "../Components/ui/progress";
 import { Switch } from "../Components/ui/switch";
+import VideoPlayerWithTrimming from "../Components/VideoPlayerWithTrimming";
 import { 
   Upload, 
   Video, 
@@ -67,7 +68,8 @@ class UploadVideo extends Component {
         minutes_played: 90,
         sample_frames: [],
         status: 'uploaded',
-        storage_path: ''
+        storage_path: '',
+        match_start_time: 0
       },
       error: ''
     };
@@ -98,11 +100,15 @@ class UploadVideo extends Component {
 
       const formatMap = { mp4: 'mp4', mov: 'mov', avi: 'avi', mkv: 'mkv' };
 
+      const publicUrl = storageService.getPublicUrl(storagePath);
+      console.log('Upload complete. Storage path:', storagePath);
+      console.log('Public URL:', publicUrl);
+      
       this.setState(prev => ({
         videoData: {
           ...prev.videoData,
           title: file.name.replace(/\.[^/.]+$/, ''),
-          file_url: storageService.getPublicUrl(storagePath),
+          file_url: publicUrl,
           file_size: file.size,
           format: formatMap[extension] || 'mp4',
           storage_path: storagePath
@@ -136,6 +142,24 @@ class UploadVideo extends Component {
     this.setState({ error: '', step: 3 });
   };
 
+  handleSetMatchStartTime = (startTime) => {
+    this.setState(prev => ({
+      videoData: {
+        ...prev.videoData,
+        match_start_time: Math.round(startTime)
+      }
+    }));
+  };
+
+  handleDurationLoaded = (duration) => {
+    this.setState(prev => ({
+      videoData: {
+        ...prev.videoData,
+        duration: duration
+      }
+    }));
+  };
+
   handlePlayerInfoSubmit = async () => {
     const { videoData } = this.state;
     if (!videoData.player_name || !videoData.player_team) {
@@ -158,11 +182,16 @@ class UploadVideo extends Component {
       const videoId = createdVideo.id;
       console.log('Video created with ID:', videoId);
       
-      // Now extract frames with the video ID
-      const fileUrl = videoData.file_url;
+      // Now extract frames with the video ID and match start time
+      let fileUrl = videoData.file_url;
+      // Backend expects relative paths without leading slash (e.g., "videos/..." not "/videos/...")
+      if (fileUrl.startsWith('/')) {
+        fileUrl = fileUrl.substring(1);
+      }
       console.log('Starting frame extraction from:', fileUrl);
+      console.log('Match start time:', videoData.match_start_time);
       
-      const result = await actionAnnotationService.extractFrames(fileUrl, videoId);
+      const result = await actionAnnotationService.extractFrames(fileUrl, videoId, videoData.match_start_time);
       if (result && result.frames) {
         console.log(`Successfully extracted ${result.frames.length} frames from backend`);
         this.setState(prev => ({
@@ -170,9 +199,12 @@ class UploadVideo extends Component {
             ...prev.videoData,
             id: videoId,
             sample_frames: result.frames.map((frame, index) => ({
-              timestamp: 0,
-              frame_url: frame.url || `/api/frame/${frame.id}`,
               frame_id: frame.id,
+              frame_index: frame.frame_index,
+              timestamp: frame.frame_index ? frame.frame_index / 30 : 0,  // Assume 30fps
+              frame_url: frame.url || `/api/frame/${frame.id}`,
+              width: frame.width,
+              height: frame.height,
               annotation: null
             }))
           },
@@ -208,12 +240,46 @@ class UploadVideo extends Component {
     }));
   };
 
-  handleConfirmFrames = () => {
+  handleConfirmFrames = async () => {
     if (this.state.selectedFrames.length === 0) {
       this.setState({ error: 'Please annotate the player in at least one frame.' });
       return;
     }
-    this.setState({ error: '', step: 5 });
+    
+    try {
+      // Save annotated frames to the database
+      const { videoData } = this.state;
+      const annotatedFrames = videoData.sample_frames.filter((frame, idx) => 
+        this.state.selectedFrames.includes(idx)
+      );
+      
+      console.log('Saving annotated frames:', annotatedFrames);
+      console.log('Video ID:', videoData.id);
+      
+      // Update the video with sample_frames data
+      const updateUrl = `/api/videos/${videoData.id}`;
+      console.log('PUT request to:', updateUrl);
+      
+      const response = await fetch(updateUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sample_frames: videoData.sample_frames  // Send as object, not double-encoded
+        })
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.text();
+        console.error('Response status:', response.status);
+        console.error('Response body:', errorData);
+        throw new Error(`Failed to save annotated frames (${response.status}): ${errorData}`);
+      }
+      
+      this.setState({ error: '', step: 5 });
+    } catch (err) {
+      console.error('Error confirming frames:', err);
+      this.setState({ error: `Failed to save frames: ${err.message}` });
+    }
   };
 
   handleCreateTask = async () => {
@@ -382,6 +448,31 @@ class UploadVideo extends Component {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-6">
+                  {/* Video Player with Trimming */}
+                  <div className="space-y-3">
+                    <Label className="text-base font-semibold">Preview & Set Match Start Time</Label>
+                    <p className="text-sm text-slate-600">
+                      Play the video and click "Set Match Start" at the point where the actual match begins (after the intro)
+                    </p>
+                    <VideoPlayerWithTrimming
+                      videoUrl={videoData.file_url}
+                      matchStartTime={videoData.match_start_time}
+                      onSetMatchStart={this.handleSetMatchStartTime}
+                      onDurationLoaded={this.handleDurationLoaded}
+                    />
+                    {videoData.match_start_time > 0 && (
+                      <div className="p-3 bg-emerald-50 rounded-lg border border-emerald-200 flex items-center gap-2">
+                        <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                        <div>
+                          <p className="text-sm font-medium text-emerald-900">Match start time set</p>
+                          <p className="text-xs text-emerald-700">
+                            Intro will be skipped for {Math.floor(videoData.match_start_time / 60)}min {Math.floor(videoData.match_start_time % 60)}sec
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
                   <div className="bg-slate-50 rounded-lg p-4 grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div>
                       <p className="text-xs text-slate-500">Duration</p>
@@ -574,22 +665,19 @@ class UploadVideo extends Component {
                           <Clock className="w-3 h-3" />
                           Approximate Minutes Played
                         </Label>
-                        <Select
-                          value={videoData.minutes_played?.toString()}
-                          onValueChange={(value) => this.setState(prev => ({ videoData: { ...prev.videoData, minutes_played: parseInt(value) }}))}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select minutes" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="15">0-15 minutes</SelectItem>
-                            <SelectItem value="30">15-30 minutes</SelectItem>
-                            <SelectItem value="45">30-45 minutes</SelectItem>
-                            <SelectItem value="60">45-60 minutes</SelectItem>
-                            <SelectItem value="75">60-75 minutes</SelectItem>
-                            <SelectItem value="85">75-90 minutes</SelectItem>
-                          </SelectContent>
-                        </Select>
+                        <Input
+                          type="number"
+                          min="0"
+                          value={videoData.minutes_played}
+                          onChange={(e) => this.setState(prev => ({ 
+                            videoData: { 
+                              ...prev.videoData, 
+                              minutes_played: parseInt(e.target.value) || 0
+                            }
+                          }))}
+                          placeholder="Enter minutes"
+                          className="w-full"
+                        />
                       </motion.div>
                     )}
                   </div>
