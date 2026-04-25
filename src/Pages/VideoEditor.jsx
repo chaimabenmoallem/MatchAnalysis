@@ -1175,8 +1175,10 @@ class VideoEditor extends Component {
                   var startIdStr = String(start.id);
                   var startSec = start.timestamp / 1000;
                   var endSec = end.timestamp / 1000;
+                  // Use the zone from the start tag itself, not the global selectedZone
+                  var segmentZone = start.zone || selectedZone;
                   
-                  console.log('Adding to queue:', start.id, '->', end.id, 'as string:', startIdStr, 'with zone:', selectedZone);
+                  console.log('Adding to queue:', start.id, '->', end.id, 'as string:', startIdStr, 'with zone:', segmentZone, 'from tag:', start.zone);
                   
                   if (queuedStartIds[startIdStr]) {
                     console.log('Already queued, skipping');
@@ -1189,7 +1191,7 @@ class VideoEditor extends Component {
                     endId: end.id,
                     startTime: startSec,
                     endTime: endSec,
-                    zone: selectedZone
+                    zone: segmentZone
                   });
                   console.log('Queue now has', queuedSegments.length, 'items, IDs:', Object.keys(queuedStartIds));
                   renderAll();
@@ -1792,8 +1794,10 @@ class VideoEditor extends Component {
                 matchStartTime={matchStartTime}
                 readOnly={this.state.analystTaskCreated}
                 onSeek={(time) => {
+                  // EnhancedTimeline already adds matchStartTime before calling onSeek,
+                  // so 'time' is already the absolute time we need for playback
                   if (this.videoRef.current) {
-                    this.videoRef.current.currentTime = time + (matchStartSet && matchStartTime > 0 ? matchStartTime : 0);
+                    this.videoRef.current.currentTime = time;
                   }
                 }}
                 onPlaySegment={(segment) => {
@@ -2143,15 +2147,21 @@ class VideoEditor extends Component {
                   const colors = zoneColors[zone] || zoneColors.defending;
                   const zoneName = zoneLabels[zone] || zone;
                   
+                  // Apply matchStartTime offset for display (same as EnhancedTimeline)
+                  const displayStartTime = matchStartSet && matchStartTime > 0 ? Math.max(0, segment.start_time - matchStartTime) : segment.start_time;
+                  const displayEndTime = matchStartSet && matchStartTime > 0 ? Math.max(0, segment.end_time - matchStartTime) : segment.end_time;
+                  
                   return (
                   <div
                     key={segment.id}
                     className={`relative group cursor-pointer rounded-lg overflow-hidden border-2 ${colors.border} ${colors.bg} transition-all hover:scale-105 hover:shadow-lg`}
                     onClick={() => {
                       if (this.videoRef.current) {
+                        // Use absolute time for playback (segment times are always absolute from database)
+                        // The video player will display it as displayCurrentTime = currentTime - matchStartTime
                         this.videoRef.current.currentTime = segment.start_time;
                         this.videoRef.current.play();
-                        this.setState({ isPlaying: true, playUntilTime: segment.end_time });
+                        this.setState({ isPlaying: true, playUntilTime: segment.end_time, currentTime: segment.start_time });
                       }
                     }}
                   >
@@ -2202,7 +2212,7 @@ class VideoEditor extends Component {
                       <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
                         <div className="absolute bottom-2 left-2 right-2">
                           <p className="text-white text-xs font-medium">
-                            {this.formatTime(segment.start_time)} - {this.formatTime(segment.end_time)}
+                            {this.formatTime(displayStartTime)} - {this.formatTime(displayEndTime)}
                           </p>
                         </div>
                       </div>
@@ -2210,10 +2220,10 @@ class VideoEditor extends Component {
 
                     <div className="absolute top-2 left-2 right-2 flex justify-between items-start">
                       <div className="bg-black/70 text-white text-xs px-2 py-0.5 rounded font-mono">
-                        {this.formatTime(segment.start_time)}
+                        {this.formatTime(displayStartTime)}
                       </div>
                       <div className="bg-black/70 text-white text-xs px-2 py-0.5 rounded font-mono">
-                        {this.formatTime(segment.end_time)}
+                        {this.formatTime(displayEndTime)}
                       </div>
                     </div>
 
